@@ -65,6 +65,7 @@ app.use((req, res, next) => {
   const startAt = process.hrtime.bigint();
 
   res.on('finish', () => {
+    if (req.path === '/health') return;
     const durationMs = Number(process.hrtime.bigint() - startAt) / 1_000_000;
     logger.info('request completed', {
       method: req.method,
@@ -81,6 +82,36 @@ app.use((req, res, next) => {
 // ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
+
+// GET /error/chaos
+// Returns a random status: 200 (x2 weight), 429, 500, or 503 on every call.
+app.get('/error/chaos', (req, res) => {
+  const outcomes = [200, 200, 429, 500, 503];
+  const status = outcomes[Math.floor(Math.random() * outcomes.length)];
+  const messages = { 200: 'ok', 429: 'rate limit exceeded', 500: 'internal server error', 503: 'service unavailable' };
+  const msg = messages[status];
+
+  if (status !== 200) {
+    logger.error(`Chaos endpoint returning ${status} — random status selected from pool [200,429,500,503]`, { requestId: req.requestId, status, message: msg });
+    return res.status(status).json({ error: msg, simulated: true });
+  }
+  logger.info('Chaos endpoint returning 200 — random status selected from pool [200,429,500,503]', { requestId: req.requestId, status });
+  res.json({ message: msg, simulated: true });
+});
+
+// GET /error/slow-fail
+// Adds 300ms–1500ms delay then fails 40% of the time with 500.
+app.get('/error/slow-fail', async (req, res) => {
+  const delay = 300 + Math.floor(Math.random() * 1200);
+  await sleep(delay);
+
+  if (Math.random() < 0.4) {
+    logger.error(`Slow-fail endpoint returning 500 — 40% failure rate triggered after ${delay}ms artificial delay`, { requestId: req.requestId, delay_ms: delay });
+    return res.status(500).json({ error: 'simulated slow failure', delay_ms: delay, simulated: true });
+  }
+  logger.info(`Slow-fail endpoint returning 200 — 60% success rate passed after ${delay}ms artificial delay`, { requestId: req.requestId, delay_ms: delay });
+  res.json({ message: 'ok', delay_ms: delay, simulated: true });
+});
 
 // GET /health
 app.get('/health', (req, res) => {

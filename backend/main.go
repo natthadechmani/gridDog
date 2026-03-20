@@ -74,6 +74,10 @@ func requestLogger(logger *slog.Logger) gin.HandlerFunc {
 
 		c.Next()
 
+		if c.Request.URL.Path == "/health" {
+			return
+		}
+
 		duration := time.Since(start)
 		status := c.Writer.Status()
 
@@ -392,6 +396,52 @@ func flowCascadeHandler(javaURL, expressURL string) gin.HandlerFunc {
 }
 
 // ---------------------------------------------------------------------------
+// Handlers: /api/error/*  – simulated error scenarios
+// ---------------------------------------------------------------------------
+
+// flaky: proxies to Java /error/flaky — error originates in Java
+func errorFlakyHandler(javaURL string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		logger := getLogger(c)
+		data, status, err := doRequest(c.Request.Context(), logger, http.MethodGet, javaURL+"/error/flaky", nil, 10)
+		if err != nil {
+			logger.Error("failed to reach java-service for flaky simulation — upstream unreachable", slog.String("target", javaURL+"/error/flaky"), slog.String("error", err.Error()))
+			c.JSON(http.StatusBadGateway, gin.H{"error": "upstream error", "detail": err.Error()})
+			return
+		}
+		c.Data(status, "application/json", data)
+	}
+}
+
+// chaos: proxies to Express /error/chaos — error originates in Express
+func errorChaosHandler(expressURL string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		logger := getLogger(c)
+		data, status, err := doRequest(c.Request.Context(), logger, http.MethodGet, expressURL+"/error/chaos", nil, 10)
+		if err != nil {
+			logger.Error("failed to reach express-service for chaos simulation — upstream unreachable", slog.String("target", expressURL+"/error/chaos"), slog.String("error", err.Error()))
+			c.JSON(http.StatusBadGateway, gin.H{"error": "upstream error", "detail": err.Error()})
+			return
+		}
+		c.Data(status, "application/json", data)
+	}
+}
+
+// slow-fail: proxies to Express /error/slow-fail — delay + error originate in Express
+func errorSlowFailHandler(expressURL string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		logger := getLogger(c)
+		data, status, err := doRequest(c.Request.Context(), logger, http.MethodGet, expressURL+"/error/slow-fail", nil, 10)
+		if err != nil {
+			logger.Error("failed to reach express-service for slow-fail simulation — upstream unreachable", slog.String("target", expressURL+"/error/slow-fail"), slog.String("error", err.Error()))
+			c.JSON(http.StatusBadGateway, gin.H{"error": "upstream error", "detail": err.Error()})
+			return
+		}
+		c.Data(status, "application/json", data)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Handler: GET /api/items  – proxy to Java GET /items
 // ---------------------------------------------------------------------------
 
@@ -705,6 +755,13 @@ func main() {
 		}
 
 		api.GET("/items", itemsProxyHandler(javaURL))
+
+		errorGroup := api.Group("/error")
+		{
+			errorGroup.GET("/flaky", errorFlakyHandler(javaURL))
+			errorGroup.GET("/chaos", errorChaosHandler(expressURL))
+			errorGroup.GET("/slow-fail", errorSlowFailHandler(expressURL))
+		}
 
 		stressGroup := api.Group("/stress")
 		{

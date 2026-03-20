@@ -30,6 +30,28 @@ public class ItemController {
         this.itemRepository = itemRepository;
     }
 
+    @GetMapping("/error/flaky")
+    public ResponseEntity<Map<String, Object>> errorFlaky() {
+        long start = System.currentTimeMillis();
+        boolean fail = ThreadLocalRandom.current().nextBoolean();
+
+        long duration = System.currentTimeMillis() - start;
+        if (fail) {
+            log.error("Flaky endpoint returning 500 — 50% failure rate triggered on this roll",
+                    StructuredArguments.kv("path", "/error/flaky"),
+                    StructuredArguments.kv("status", 500),
+                    StructuredArguments.kv("duration_ms", duration));
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "simulated flaky failure", "simulated", true));
+        }
+
+        log.info("Flaky endpoint returning 200 — 50% success rate passed on this roll",
+                StructuredArguments.kv("path", "/error/flaky"),
+                StructuredArguments.kv("status", 200),
+                StructuredArguments.kv("duration_ms", duration));
+        return ResponseEntity.ok(Map.of("message", "ok", "simulated", true));
+    }
+
     @GetMapping("/health")
     public ResponseEntity<Map<String, String>> health() {
         long start = System.currentTimeMillis();

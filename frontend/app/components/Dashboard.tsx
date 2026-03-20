@@ -587,9 +587,12 @@ function ResponseLog({
   onClear: () => void
 }) {
   const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
   }, [entries])
 
   return (
@@ -626,7 +629,7 @@ function ResponseLog({
       </div>
 
       {/* Log entries */}
-      <div className="terminal-panel h-64 overflow-y-auto p-2">
+      <div ref={scrollRef} className="terminal-panel h-64 overflow-y-auto p-2">
         {entries.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-2 text-text-secondary">
             <Terminal size={24} strokeWidth={1} />
@@ -932,6 +935,9 @@ type FlowKey =
   | 'flow4'
   | 'cascade'
   | 'items'
+  | 'errorFlaky'
+  | 'errorChaos'
+  | 'errorSlowFail'
 
 interface FlowDefinition {
   title: string
@@ -943,45 +949,63 @@ interface FlowDefinition {
 const FLOW_DEFINITIONS: Record<FlowKey, FlowDefinition> = {
   flow1: {
     title: 'Flow 1 — Correct Path',
-    description: 'Backend → Java → DB (valid ID). Fetches item with known-good ID.',
+    description: 'nginx → Go backend → Java GET /items/1 → Postgres SELECT by id=1 → 200 OK with item data.',
     method: 'GET',
     endpoint: `${BACKEND_URL}/api/flow/1`,
   },
   flow2: {
     title: 'Flow 2 — DB Not Found',
-    description: 'Backend → Java → DB (invalid ID 9999). Expects 404 error from downstream.',
+    description: 'nginx → Go backend → Java GET /items/9999 → Postgres SELECT (no row) → Java 404 → Go propagates 404.',
     method: 'GET',
     endpoint: `${BACKEND_URL}/api/flow/2`,
   },
   flow3s: {
     title: 'Flow 3 — Compute Success',
-    description: 'Backend → Express → fibonacci compute. Returns computed result.',
+    description: 'nginx → Go backend → Express GET /compute → fibonacci(30) computed → 200 OK with result and compute time.',
     method: 'GET',
     endpoint: `${BACKEND_URL}/api/flow/3/success`,
   },
   flow3t: {
     title: 'Flow 3 — Compute Timeout',
-    description: 'Backend → Express → 15s timeout. Expect gateway timeout error.',
+    description: 'nginx → Go backend → Express GET /compute/timeout → Express sleeps 15s → Go waits (60s limit) → Express responds at 15s → Go propagates response.',
     method: 'GET',
     endpoint: `${BACKEND_URL}/api/flow/3/timeout`,
   },
   flow4: {
     title: 'Flow 4 — Create Item',
-    description: 'Backend → Java → DB (insert random item). Returns created entity.',
+    description: 'nginx → Go backend (generates random payload) → Java POST /items → Postgres INSERT → Java 201 Created → Go returns new entity.',
     method: 'POST',
     endpoint: `${BACKEND_URL}/api/flow/4`,
   },
   cascade: {
-    title: 'Flow — Cascade Failure',
-    description: 'Java fails → Express skipped → partial response with degraded data.',
+    title: 'Flow 5 — Cascade Failure',
+    description: 'nginx → Go backend → Java GET /items/1 → if Java fails: Express is skipped, Go returns 206 partial. If Java succeeds: → Express GET /compute → Go merges both results.',
     method: 'GET',
     endpoint: `${BACKEND_URL}/api/flow/cascade`,
   },
   items: {
-    title: 'Items List',
-    description: 'List all DB items via Java service. Paginated response.',
+    title: 'Flow 6 — Items List',
+    description: 'nginx → Go backend → Java GET /items → Postgres SELECT all rows → Java 200 with list → Go proxies list to client.',
     method: 'GET',
     endpoint: `${BACKEND_URL}/api/items`,
+  },
+  errorFlaky: {
+    title: 'Flow 7 — Flaky Error',
+    description: 'nginx → Go backend → Java GET /error/flaky → Java rolls 50/50: 200 OK or 500 error → Go propagates whichever status Java returned.',
+    method: 'GET',
+    endpoint: `${BACKEND_URL}/api/error/flaky`,
+  },
+  errorChaos: {
+    title: 'Flow 8 — Chaos Error',
+    description: 'nginx → Go backend → Express GET /error/chaos → Express randomly picks 200 / 429 / 500 / 503 → Go propagates whichever status Express returned.',
+    method: 'GET',
+    endpoint: `${BACKEND_URL}/api/error/chaos`,
+  },
+  errorSlowFail: {
+    title: 'Flow 9 — Slow Fail',
+    description: 'nginx → Go backend → Express GET /error/slow-fail → Express sleeps 300–1500ms, then 40% → 500 or 60% → 200 → Go propagates status and delay_ms.',
+    method: 'GET',
+    endpoint: `${BACKEND_URL}/api/error/slow-fail`,
   },
 }
 
