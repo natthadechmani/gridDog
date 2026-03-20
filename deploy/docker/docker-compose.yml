@@ -151,21 +151,21 @@ services:
       context: ../../frontend
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_BACKEND_URL: http://YOUR_EC2_PUBLIC_IP   # replace with your EC2 public IP/DNS
+        NEXT_PUBLIC_BACKEND_URL: http://localhost             # local dev — change to EC2 public IP/DNS on server
     image: griddog/frontend:latest
     container_name: griddog-frontend
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_BACKEND_URL: http://YOUR_EC2_PUBLIC_IP     # replace with your EC2 public IP/DNS
+      NEXT_PUBLIC_BACKEND_URL: http://localhost               # local dev — change to EC2 public IP/DNS on server
     depends_on:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000 || exit 1"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
       interval: 15s
       timeout: 5s
       retries: 3
-      start_period: 15s
+      start_period: 20s
     networks:
       - griddog
     labels:
