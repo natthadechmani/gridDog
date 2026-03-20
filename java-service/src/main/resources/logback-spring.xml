@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <springProperty scope="context" name="appName" source="spring.application.name" defaultValue="java-service"/>
+
+    <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeCallerData>false</includeCallerData>
+
+            <!-- Rename default fields to match expected schema -->
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <version>[ignore]</version>
+                <levelValue>[ignore]</levelValue>
+                <logger>logger</logger>
+                <thread>thread</thread>
+                <level>level</level>
+                <message>message</message>
+                <stackTrace>stack_trace</stackTrace>
+            </fieldNames>
+
+            <!-- Emit timestamp in ISO-8601 format -->
+            <timestampPattern>yyyy-MM-dd'T'HH:mm:ss.SSSZ</timestampPattern>
+
+            <!-- Static service label present on every log line -->
+            <customFields>{"service":"java-service"}</customFields>
+
+            <!-- Include MDC fields automatically -->
+            <includeMdc>true</includeMdc>
+
+            <!-- Include structured arguments (key-value pairs) passed via StructuredArguments -->
+            <includeStructuredArguments>true</includeStructuredArguments>
+            <nonStructuredArgumentsFieldPrefix>arg_</nonStructuredArgumentsFieldPrefix>
+        </encoder>
+    </appender>
+
+    <!-- Root logger: INFO and above go to JSON console -->
+    <root level="INFO">
+        <appender-ref ref="JSON_CONSOLE"/>
+    </root>
+
+    <!-- Application packages: DEBUG and above -->
+    <logger name="com.griddog" level="DEBUG" additivity="false">
+        <appender-ref ref="JSON_CONSOLE"/>
+    </logger>
+
+    <!-- Silence noisy framework loggers to reduce test noise -->
+    <logger name="org.hibernate" level="WARN" additivity="false">
+        <appender-ref ref="JSON_CONSOLE"/>
+    </logger>
+    <logger name="org.springframework" level="WARN" additivity="false">
+        <appender-ref ref="JSON_CONSOLE"/>
+    </logger>
+    <logger name="com.zaxxer.hikari" level="WARN" additivity="false">
+        <appender-ref ref="JSON_CONSOLE"/>
+    </logger>
+
+</configuration>

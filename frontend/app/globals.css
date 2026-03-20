@@ -1,0 +1,239 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0F1117;
+  --card: #1A1D27;
+  --border: #2A2D3A;
+  --dd-purple: #7B4FFF;
+  --dd-purple-light: #9D78FF;
+  --dd-green: #00C389;
+  --dd-red: #FF4B4B;
+  --dd-amber: #FFAA00;
+  --text-primary: #E8E9F0;
+  --text-secondary: #8B8FA8;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  background-color: var(--background);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1A1D27;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2A2D3A;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #7B4FFF;
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2A2D3A #1A1D27;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulseRed {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(255, 75, 75, 0.4);
+  }
+  50% {
+    opacity: 0.7;
+    box-shadow: 0 0 0 6px rgba(255, 75, 75, 0);
+  }
+}
+
+@keyframes pulseGreen {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(0, 195, 137, 0.4);
+  }
+  50% {
+    opacity: 0.7;
+    box-shadow: 0 0 0 6px rgba(0, 195, 137, 0);
+  }
+}
+
+@keyframes pulsePurple {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(123, 79, 255, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(123, 79, 255, 0);
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes progressShimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.animate-slide-down {
+  animation: slideDown 0.25s ease-out;
+}
+
+.animate-pulse-red {
+  animation: pulseRed 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-pulse-green {
+  animation: pulseGreen 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-pulse-purple {
+  animation: pulsePurple 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* JSON syntax highlighting */
+.json-key {
+  color: #9D78FF;
+}
+
+.json-string {
+  color: #00C389;
+}
+
+.json-number {
+  color: #FFAA00;
+}
+
+.json-boolean {
+  color: #FF4B4B;
+}
+
+.json-null {
+  color: #8B8FA8;
+}
+
+/* Terminal log panel */
+.terminal-panel {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* Progress bar shimmer */
+.progress-shimmer {
+  background: linear-gradient(
+    90deg,
+    #7B4FFF 0%,
+    #9D78FF 50%,
+    #7B4FFF 100%
+  );
+  background-size: 200% 100%;
+  animation: progressShimmer 2s linear infinite;
+}
+
+/* Toggle switch */
+.toggle-track {
+  transition: background-color 0.2s ease;
+}
+
+.toggle-thumb {
+  transition: transform 0.2s ease;
+}
+
+/* Card hover effect */
+.flow-card {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
+}
+
+.flow-card:hover {
+  border-color: rgba(123, 79, 255, 0.4);
+  box-shadow: 0 8px 32px rgba(123, 79, 255, 0.1);
+}
+
+/* Button transitions */
+.btn-primary {
+  transition: all 0.15s ease;
+}
+
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* Gradient border effect */
+.gradient-border {
+  position: relative;
+}
+
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(123, 79, 255, 0.5), rgba(0, 195, 137, 0.2));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}

@@ -1,0 +1,79 @@
+version: "3.9"
+
+# =============================================================================
+# Thailand Region Override – ap-southeast-7 (Bangkok)
+#
+# Designed to run on a single EC2 instance in ap-southeast-7a.
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.thailand.yml up -d
+# =============================================================================
+
+networks:
+  griddog:
+    driver: bridge
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 15
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: griddog/postgres:latest-ap-southeast-7
+    labels:
+      com.griddog.service: postgres
+      com.griddog.region: ap-southeast-7
+      REGION: ap-southeast-7
+      AZ: ap-southeast-7a
+
+  # ---------------------------------------------------------------------------
+  # Backend – Golang
+  # ---------------------------------------------------------------------------
+  backend:
+    image: griddog/backend:latest-ap-southeast-7
+    # Port 8080 is kept identical to the base file; documented here for clarity.
+    # Host port 8080 → container port 8080
+    ports:
+      - "8080:8080"
+    labels:
+      com.griddog.service: backend
+      com.griddog.region: ap-southeast-7
+      REGION: ap-southeast-7
+      AZ: ap-southeast-7a
+
+  # ---------------------------------------------------------------------------
+  # Java Service – Spring Boot
+  # ---------------------------------------------------------------------------
+  java-service:
+    image: griddog/java-service:latest-ap-southeast-7
+    labels:
+      com.griddog.service: java-service
+      com.griddog.region: ap-southeast-7
+      REGION: ap-southeast-7
+      AZ: ap-southeast-7a
+
+  # ---------------------------------------------------------------------------
+  # Express Service – Node.js / Express.js
+  # ---------------------------------------------------------------------------
+  express-service:
+    image: griddog/express-service:latest-ap-southeast-7
+    labels:
+      com.griddog.service: express-service
+      com.griddog.region: ap-southeast-7
+      REGION: ap-southeast-7
+      AZ: ap-southeast-7a
+
+  # ---------------------------------------------------------------------------
+  # Frontend – Next.js
+  # ---------------------------------------------------------------------------
+  frontend:
+    image: griddog/frontend:latest-ap-southeast-7
+    # Port 3000 is kept identical to the base file; documented here for clarity.
+    # Host port 3000 → container port 3000
+    ports:
+      - "80:3000"
+    labels:
+      com.griddog.service: frontend
+      com.griddog.region: ap-southeast-7
+      REGION: ap-southeast-7
+      AZ: ap-southeast-7a

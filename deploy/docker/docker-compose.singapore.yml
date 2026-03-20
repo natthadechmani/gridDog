@@ -1,0 +1,75 @@
+version: "3.9"
+
+# =============================================================================
+# Singapore Region Override – ap-southeast-1
+#
+# Designed to run on a single EC2 instance in ap-southeast-1b.
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.singapore.yml up -d
+# =============================================================================
+
+networks:
+  griddog:
+    driver: bridge
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 15
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: griddog/postgres:latest-ap-southeast-1
+    labels:
+      com.griddog.service: postgres
+      com.griddog.region: ap-southeast-1
+      REGION: ap-southeast-1
+      AZ: ap-southeast-1b
+
+  # ---------------------------------------------------------------------------
+  # Backend – Golang
+  # ---------------------------------------------------------------------------
+  backend:
+    image: griddog/backend:latest-ap-southeast-1
+    ports:
+      - "8080:8080"
+    labels:
+      com.griddog.service: backend
+      com.griddog.region: ap-southeast-1
+      REGION: ap-southeast-1
+      AZ: ap-southeast-1b
+
+  # ---------------------------------------------------------------------------
+  # Java Service – Spring Boot
+  # ---------------------------------------------------------------------------
+  java-service:
+    image: griddog/java-service:latest-ap-southeast-1
+    labels:
+      com.griddog.service: java-service
+      com.griddog.region: ap-southeast-1
+      REGION: ap-southeast-1
+      AZ: ap-southeast-1b
+
+  # ---------------------------------------------------------------------------
+  # Express Service – Node.js / Express.js
+  # ---------------------------------------------------------------------------
+  express-service:
+    image: griddog/express-service:latest-ap-southeast-1
+    labels:
+      com.griddog.service: express-service
+      com.griddog.region: ap-southeast-1
+      REGION: ap-southeast-1
+      AZ: ap-southeast-1b
+
+  # ---------------------------------------------------------------------------
+  # Frontend – Next.js
+  # ---------------------------------------------------------------------------
+  frontend:
+    image: griddog/frontend:latest-ap-southeast-1
+    ports:
+      - "3000:3000"
+    labels:
+      com.griddog.service: frontend
+      com.griddog.region: ap-southeast-1
+      REGION: ap-southeast-1
+      AZ: ap-southeast-1b

@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: java-service
+  namespace: griddog
+  labels:
+    app: griddog
+    component: java-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: griddog
+      component: java-service
+  template:
+    metadata:
+      labels:
+        app: griddog
+        component: java-service
+    spec:
+      containers:
+        - name: java-service
+          image: griddog/java-service:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8081
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: griddog-config
+          env:
+            - name: PORT
+              value: "8081"
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: griddog-config
+                  key: JAVA_DATABASE_URL
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "768Mi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8081
+            # Longer initial delay to allow JVM warmup
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8081
+            # Even longer initial delay for liveness to avoid killing a warming JVM
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: java-service
+  namespace: griddog
+  labels:
+    app: griddog
+    component: java-service
+spec:
+  type: ClusterIP
+  selector:
+    app: griddog
+    component: java-service
+  ports:
+    - name: http
+      port: 8081
+      targetPort: 8081
+      protocol: TCP
