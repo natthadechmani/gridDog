@@ -19,3 +19,7 @@ databases_private_ip: "172.31.x.x"
 
 # ALB DNS from: terraform output alb_dns_name
 alb_dns: "griddog-alb-xxxx.ap-southeast-1.elb.amazonaws.com"
+
+# Datadog
+dd_api_key: "your-datadog-api-key"
+dd_env: "qa"

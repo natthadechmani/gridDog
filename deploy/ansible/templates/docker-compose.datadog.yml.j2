@@ -1,0 +1,23 @@
+services:
+
+  datadog-agent:
+    image: registry.datadoghq.com/agent:latest
+    container_name: griddog-datadog
+    restart: unless-stopped
+    environment:
+      - DD_API_KEY={{ dd_api_key }}
+      - DD_HOSTNAME={{ inventory_hostname }}
+      - DD_ENV={{ dd_env }}
+      - DD_LOGS_ENABLED=true
+      - DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL=true
+      - DD_PROCESS_AGENT_ENABLED=true
+      - DD_CONTAINER_LABELS_AS_TAGS={"my.custom.label.team":"team"}
+      - DD_TAGS=group:griddog
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc/:/host/proc/:ro
+      - /sys/fs/cgroup/:/host/sys/fs/cgroup:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /opt/datadog-agent/run:/opt/datadog-agent/run:rw
+    labels:
+      com.datadoghq.ad.logs: '[{"source": "docker", "service": "datadog-agent", "env": "{{ dd_env }}", "version": "griddog-1.0"}]'

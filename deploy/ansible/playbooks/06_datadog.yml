@@ -1,0 +1,29 @@
+---
+- name: Deploy Datadog agent
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Create datadog compose directory
+      ansible.builtin.file:
+        path: /opt/griddog-datadog
+        state: directory
+        mode: "0755"
+
+    - name: Create datadog agent run directory
+      ansible.builtin.file:
+        path: /opt/datadog-agent/run
+        state: directory
+        mode: "0755"
+
+    - name: Template docker-compose file
+      ansible.builtin.template:
+        src: ../templates/docker-compose.datadog.yml.j2
+        dest: /opt/griddog-datadog/docker-compose.yml
+        mode: "0644"
+
+    - name: Start Datadog agent
+      community.docker.docker_compose_v2:
+        project_src: /opt/griddog-datadog
+        state: present
+        pull: always

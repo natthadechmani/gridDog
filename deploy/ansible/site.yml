@@ -4,3 +4,4 @@
 - import_playbook: playbooks/03_frontend.yml
 - import_playbook: playbooks/04_nginx.yml
 - import_playbook: playbooks/05_traffic.yml
+- import_playbook: playbooks/06_datadog.yml
