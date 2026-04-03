@@ -1,0 +1,39 @@
+---
+- name: Deploy app services (backend + java-service + express-service)
+  hosts: app
+  become: true
+
+  tasks:
+    - name: Clone griddog repo
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ repo_dir }}"
+        version: "{{ repo_branch }}"
+        force: true
+
+    - name: Create compose directory
+      ansible.builtin.file:
+        path: /opt/griddog-compose
+        state: directory
+        mode: "0755"
+
+    - name: Template docker-compose file
+      ansible.builtin.template:
+        src: ../templates/docker-compose.app.yml.j2
+        dest: /opt/griddog-compose/docker-compose.yml
+        mode: "0644"
+
+    - name: Build and start app containers
+      community.docker.docker_compose_v2:
+        project_src: /opt/griddog-compose
+        build: always
+        state: present
+        pull: never
+
+    - name: Wait for backend to be ready
+      ansible.builtin.command:
+        cmd: docker exec griddog-backend wget -qO- http://localhost:8080/health
+      register: backend_ready
+      retries: 20
+      delay: 10
+      until: backend_ready.rc == 0

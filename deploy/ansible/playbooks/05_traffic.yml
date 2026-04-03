@@ -1,0 +1,36 @@
+---
+- name: Deploy traffic generator (Puppeteer)
+  hosts: frontend
+  become: true
+
+  tasks:
+    - name: Clone griddog repo
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ repo_dir }}"
+        version: "{{ repo_branch }}"
+        force: true
+
+    - name: Create traffic compose directory
+      ansible.builtin.file:
+        path: /opt/griddog-traffic
+        state: directory
+        mode: "0755"
+
+    - name: Template docker-compose file
+      ansible.builtin.template:
+        src: ../templates/docker-compose.traffic.yml.j2
+        dest: /opt/griddog-traffic/docker-compose.yml
+        mode: "0644"
+
+    - name: Tear down stale compose project
+      ansible.builtin.command:
+        cmd: docker compose -f /opt/griddog-traffic/docker-compose.yml down --remove-orphans
+      ignore_errors: true
+
+    - name: Build and start traffic container
+      community.docker.docker_compose_v2:
+        project_src: /opt/griddog-traffic
+        build: always
+        state: present
+        pull: never

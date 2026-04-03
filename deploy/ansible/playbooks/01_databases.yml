@@ -1,0 +1,51 @@
+---
+- name: Deploy databases (PostgreSQL + MongoDB)
+  hosts: databases
+  become: true
+
+  tasks:
+    - name: Clone griddog repo
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ repo_dir }}"
+        version: "{{ repo_branch }}"
+        force: true
+
+    - name: Create data directories for EBS volumes
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - /data/postgres
+        - /data/mongodb
+        - /opt/griddog-compose
+
+    - name: Template docker-compose file
+      ansible.builtin.template:
+        src: ../templates/docker-compose.databases.yml.j2
+        dest: /opt/griddog-compose/docker-compose.yml
+        mode: "0644"
+
+    - name: Start database containers
+      community.docker.docker_compose_v2:
+        project_src: /opt/griddog-compose
+        build: never
+        state: present
+        pull: always
+
+    - name: Wait for PostgreSQL to be ready
+      ansible.builtin.command:
+        cmd: docker exec griddog-postgres pg_isready -U griddog -d griddog
+      register: pg_ready
+      retries: 15
+      delay: 5
+      until: pg_ready.rc == 0
+
+    - name: Wait for MongoDB to be ready
+      ansible.builtin.command:
+        cmd: docker exec griddog-mongodb mongosh --eval "db.adminCommand('ping')"
+      register: mongo_ready
+      retries: 15
+      delay: 5
+      until: mongo_ready.rc == 0

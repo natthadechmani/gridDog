@@ -1,0 +1,44 @@
+---
+- name: Deploy frontend (Next.js)
+  hosts: frontend
+  become: true
+
+  tasks:
+    - name: Clone griddog repo
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ repo_dir }}"
+        version: "{{ repo_branch }}"
+        force: true
+
+    - name: Create compose directory
+      ansible.builtin.file:
+        path: /opt/griddog-compose
+        state: directory
+        mode: "0755"
+
+    - name: Template docker-compose file
+      ansible.builtin.template:
+        src: ../templates/docker-compose.frontend.yml.j2
+        dest: /opt/griddog-compose/docker-compose.yml
+        mode: "0644"
+
+    - name: Tear down stale compose project
+      ansible.builtin.command:
+        cmd: docker compose -f /opt/griddog-compose/docker-compose.yml down --remove-orphans
+      ignore_errors: true
+
+    - name: Build and start frontend container
+      community.docker.docker_compose_v2:
+        project_src: /opt/griddog-compose
+        build: always
+        state: present
+        pull: never
+
+    - name: Wait for frontend to be ready
+      ansible.builtin.command:
+        cmd: docker exec griddog-frontend node -e "require('http').get('http://localhost:3000',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+      register: frontend_ready
+      retries: 20
+      delay: 10
+      until: frontend_ready.rc == 0

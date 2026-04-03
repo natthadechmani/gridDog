@@ -1,0 +1,6 @@
+---
+- import_playbook: playbooks/01_databases.yml
+- import_playbook: playbooks/02_app.yml
+- import_playbook: playbooks/03_frontend.yml
+- import_playbook: playbooks/04_nginx.yml
+- import_playbook: playbooks/05_traffic.yml

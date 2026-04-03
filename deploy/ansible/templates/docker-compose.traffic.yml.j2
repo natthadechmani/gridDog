@@ -1,0 +1,12 @@
+services:
+
+  traffic:
+    build:
+      context: {{ repo_dir }}/traffic
+      dockerfile: Dockerfile
+    container_name: griddog-traffic
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    environment:
+      TRAFFIC_BASE_URL: "http://{{ alb_dns }}"

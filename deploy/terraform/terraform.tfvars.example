@@ -1,0 +1,16 @@
+# Copy this file to terraform.tfvars and fill in real values.
+# terraform.tfvars is gitignored — never commit secrets.
+
+aws_region        = "ap-southeast-1"
+environment       = "sg"
+availability_zone = "ap-southeast-1b"
+
+# Your IP for SSH access — find it with: curl -s ifconfig.me
+admin_cidr = "1.2.3.4/32"
+
+# Name of the EC2 key pair already created in ap-southeast-1
+key_name = "griddog-keypair"
+
+# Secrets
+db_password     = "change-me-strong-password"
+datadog_api_key = "your-dd-api-key-here"

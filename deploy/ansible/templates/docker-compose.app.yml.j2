@@ -1,0 +1,71 @@
+networks:
+  griddog:
+    driver: bridge
+
+services:
+
+  java-service:
+    build:
+      context: {{ repo_dir }}/java-service
+      dockerfile: Dockerfile
+    container_name: griddog-java-service
+    restart: unless-stopped
+    networks:
+      - griddog
+    environment:
+      PORT: "8081"
+      DATABASE_URL: "jdbc:postgresql://{{ databases_private_ip }}:5432/griddog"
+      DB_USER: griddog
+      DB_PASSWORD: "{{ db_password }}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  express-service:
+    build:
+      context: {{ repo_dir }}/express-service
+      dockerfile: Dockerfile
+    container_name: griddog-express-service
+    restart: unless-stopped
+    networks:
+      - griddog
+    environment:
+      PORT: "3001"
+      MONGODB_URI: "mongodb://{{ databases_private_ip }}:27017/griddog"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  backend:
+    build:
+      context: {{ repo_dir }}/backend
+      dockerfile: Dockerfile
+    container_name: griddog-backend
+    restart: unless-stopped
+    networks:
+      - griddog
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      JAVA_SERVICE_URL: "http://java-service:8081"
+      EXPRESS_SERVICE_URL: "http://express-service:3001"
+      TRAFFIC_SERVICE_URL: "http://{{ frontend_private_ip }}:3002"
+      DATABASE_URL: "postgres://griddog:{{ db_password }}@{{ databases_private_ip }}:5432/griddog?sslmode=disable"
+    depends_on:
+      java-service:
+        condition: service_healthy
+      express-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

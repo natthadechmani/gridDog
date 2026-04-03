@@ -1,0 +1,21 @@
+# Copy this file to all.yml and fill in real values.
+# all.yml is gitignored — never commit secrets.
+
+# GitHub Personal Access Token (repo scope)
+# Create at: https://github.com/settings/tokens
+github_pat: "ghp_xxxxxxxxxxxxxxxxxxxx"
+repo_url: "https://{{ github_pat }}@github.com/natthadechmani/gridDog.git"
+repo_branch: master
+repo_dir: /opt/griddog
+
+# DB password — must match terraform var db_password
+db_password: "your-db-password"
+
+# Fill in from: cd deploy/terraform && terraform output
+nginx_public_ip:      "54.x.x.x"
+app_private_ip:       "172.31.x.x"
+frontend_private_ip:  "172.31.x.x"
+databases_private_ip: "172.31.x.x"
+
+# ALB DNS from: terraform output alb_dns_name
+alb_dns: "griddog-alb-xxxx.ap-southeast-1.elb.amazonaws.com"

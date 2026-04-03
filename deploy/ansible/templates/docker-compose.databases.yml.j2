@@ -1,0 +1,36 @@
+services:
+
+  postgres:
+    image: postgres:15
+    container_name: griddog-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: griddog
+      POSTGRES_USER: griddog
+      POSTGRES_PASSWORD: "{{ db_password }}"
+    ports:
+      - "5432:5432"
+    volumes:
+      - /data/postgres:/var/lib/postgresql/data
+      - {{ repo_dir }}/database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U griddog -d griddog"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  mongodb:
+    image: mongo:7
+    container_name: griddog-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - /data/mongodb:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

@@ -81,7 +81,7 @@ Datadog-themed dark dashboard (`#0F1117` background, `#7B4FFF` purple accent):
 
 Deploy each service on a separate EC2 instance. Designed for **Thailand (ap-southeast-7)** and **Singapore (ap-southeast-1)**, each with 2 AZs.
 
-**Recommended instance types:** `t3.small` for Go/Express/Frontend, `t3.medium` for Java, `t3.small` for PostgreSQL.
+**Recommended instance types:** `t3.micro` for nginx and frontend, `t3.small` for app (Go+Java+Express) and databases.
 
 Run in order on each node:
 

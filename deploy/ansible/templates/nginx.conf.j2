@@ -1,0 +1,45 @@
+events {}
+
+http {
+    upstream frontend {
+        server {{ frontend_private_ip }}:3000;
+    }
+
+    upstream backend {
+        server {{ app_private_ip }}:8080;
+    }
+
+    server {
+        listen 80;
+
+        # ALB health check endpoint
+        location /nginx-health {
+            return 200 "ok\n";
+            add_header Content-Type text/plain;
+        }
+
+        # Backend health + API routes
+        location /health {
+            proxy_pass http://backend;
+            proxy_set_header Host            $host;
+            proxy_set_header X-Real-IP       $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        location /api/ {
+            proxy_pass http://backend;
+            proxy_set_header Host            $host;
+            proxy_set_header X-Real-IP       $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_read_timeout 60s;
+        }
+
+        # Everything else goes to frontend
+        location / {
+            proxy_pass http://frontend;
+            proxy_set_header Host            $host;
+            proxy_set_header X-Real-IP       $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+    }
+}

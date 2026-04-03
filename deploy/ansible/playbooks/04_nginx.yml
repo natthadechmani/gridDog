@@ -1,0 +1,50 @@
+---
+- name: Deploy nginx (reverse proxy + bastion)
+  hosts: nginx
+  become: true
+
+  tasks:
+    - name: Clone griddog repo
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ repo_dir }}"
+        version: "{{ repo_branch }}"
+        force: true
+
+    - name: Create nginx config directory
+      ansible.builtin.file:
+        path: /etc/griddog
+        state: directory
+        mode: "0755"
+
+    - name: Create compose directory
+      ansible.builtin.file:
+        path: /opt/griddog-compose
+        state: directory
+        mode: "0755"
+
+    - name: Template nginx.conf
+      ansible.builtin.template:
+        src: ../templates/nginx.conf.j2
+        dest: /etc/griddog/nginx.conf
+        mode: "0644"
+
+    - name: Template docker-compose file
+      ansible.builtin.template:
+        src: ../templates/docker-compose.nginx.yml.j2
+        dest: /opt/griddog-compose/docker-compose.yml
+        mode: "0644"
+
+    - name: Start nginx container
+      community.docker.docker_compose_v2:
+        project_src: /opt/griddog-compose
+        build: never
+        state: present
+        pull: always
+
+    - name: Wait for nginx to be ready
+      ansible.builtin.wait_for:
+        host: localhost
+        port: 80
+        delay: 2
+        timeout: 60
