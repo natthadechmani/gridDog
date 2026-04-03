@@ -566,6 +566,7 @@ function ResponseLog({
 }) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const [selected, setSelected] = useState<LogEntry | null>(null)
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -573,112 +574,209 @@ function ResponseLog({
     }
   }, [entries])
 
+  useEffect(() => {
+    if (!selected) return
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelected(null) }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [selected])
+
   return (
-    <div
-      className="rounded-lg overflow-hidden"
-      style={{
-        background: '#1A1D27',
-        border: '1px solid #2A2D3A',
-        boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
-      }}
-    >
-      {/* Header */}
+    <>
       <div
-        className="flex items-center justify-between px-4 py-3"
-        style={{ borderBottom: '1px solid #2A2D3A', background: 'rgba(42,45,58,0.4)' }}
+        className="rounded-lg overflow-hidden"
+        style={{
+          background: '#1A1D27',
+          border: '1px solid #2A2D3A',
+          boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
+        }}
       >
-        <div className="flex items-center gap-2">
-          <Terminal size={14} className="text-dd-purple" />
-          <span className="text-sm font-semibold text-text-primary">Response Log</span>
-          <span
-            className="text-xs px-2 py-0.5 rounded-full font-mono"
-            style={{ background: 'rgba(123,79,255,0.2)', color: '#9D78FF' }}
-          >
-            {entries.length}/50
-          </span>
-        </div>
-        <button
-          onClick={onClear}
-          className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-dd-red transition-colors px-2 py-1 rounded hover:bg-dd-red/10"
+        {/* Header */}
+        <div
+          className="flex items-center justify-between px-4 py-3"
+          style={{ borderBottom: '1px solid #2A2D3A', background: 'rgba(42,45,58,0.4)' }}
         >
-          <Trash2 size={12} />
-          Clear
-        </button>
-      </div>
-
-      {/* Log entries */}
-      <div ref={scrollRef} className="terminal-panel h-64 overflow-y-auto p-2">
-        {entries.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-2 text-text-secondary">
-            <Terminal size={24} strokeWidth={1} />
-            <span className="text-xs">No requests yet. Send a flow to see logs.</span>
-          </div>
-        ) : (
-          entries.map((entry) => (
-            <div
-              key={entry.id}
-              className="flex items-start gap-2 px-2 py-1 rounded hover:bg-white/5 transition-colors group"
+          <div className="flex items-center gap-2">
+            <Terminal size={14} className="text-dd-purple" />
+            <span className="text-sm font-semibold text-text-primary">Response Log</span>
+            <span
+              className="text-xs px-2 py-0.5 rounded-full font-mono"
+              style={{ background: 'rgba(123,79,255,0.2)', color: '#9D78FF' }}
             >
-              {/* Timestamp */}
-              <span className="text-text-secondary shrink-0" style={{ fontSize: 11 }}>
-                {entry.ts}
-              </span>
+              {entries.length}/50
+            </span>
+          </div>
+          <button
+            onClick={onClear}
+            className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-dd-red transition-colors px-2 py-1 rounded hover:bg-dd-red/10"
+          >
+            <Trash2 size={12} />
+            Clear
+          </button>
+        </div>
 
-              {/* Method */}
-              <span
-                className="shrink-0 font-semibold"
-                style={{
-                  fontSize: 10,
-                  color: entry.method === 'GET' ? '#00C389' : '#9D78FF',
-                  minWidth: 30,
-                }}
-              >
-                {entry.method}
-              </span>
-
-              {/* Endpoint */}
-              <span
-                className="text-text-primary flex-1 truncate"
-                style={{ fontSize: 11 }}
-                title={entry.endpoint}
-              >
-                {entry.endpoint.replace(BACKEND_URL, '')}
-              </span>
-
-              {/* Status */}
-              {entry.status !== null && (
-                <span
-                  className={clsx('shrink-0 font-bold font-mono', statusColor(entry.status))}
-                  style={{ fontSize: 11 }}
-                >
-                  {entry.status}
-                </span>
-              )}
-
-              {/* Latency */}
-              {entry.latency !== null && (
-                <span className="text-text-secondary shrink-0 font-mono" style={{ fontSize: 11 }}>
-                  {entry.latency}ms
-                </span>
-              )}
-
-              {/* Summary */}
-              <span
-                className={clsx(
-                  'shrink-0 truncate max-w-[140px]',
-                  entry.error ? 'text-dd-red' : 'text-text-secondary'
-                )}
-                style={{ fontSize: 10 }}
-                title={entry.summary}
-              >
-                {entry.summary}
-              </span>
+        {/* Log entries */}
+        <div ref={scrollRef} className="terminal-panel h-64 overflow-y-auto p-2">
+          {entries.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full gap-2 text-text-secondary">
+              <Terminal size={24} strokeWidth={1} />
+              <span className="text-xs">No requests yet. Send a flow to see logs.</span>
             </div>
-          ))
-        )}
-        <div ref={bottomRef} />
+          ) : (
+            entries.map((entry) => (
+              <div
+                key={entry.id}
+                onClick={() => setSelected(entry)}
+                className="flex items-start gap-2 px-2 py-1 rounded hover:bg-white/5 transition-colors group cursor-pointer"
+              >
+                {/* Timestamp */}
+                <span className="text-text-secondary shrink-0" style={{ fontSize: 11 }}>
+                  {entry.ts}
+                </span>
+
+                {/* Method */}
+                <span
+                  className="shrink-0 font-semibold"
+                  style={{
+                    fontSize: 10,
+                    color: entry.method === 'GET' ? '#00C389' : '#9D78FF',
+                    minWidth: 30,
+                  }}
+                >
+                  {entry.method}
+                </span>
+
+                {/* Endpoint */}
+                <span
+                  className="text-text-primary flex-1 truncate"
+                  style={{ fontSize: 11 }}
+                  title={entry.endpoint}
+                >
+                  {entry.endpoint.replace(BACKEND_URL, '')}
+                </span>
+
+                {/* Status */}
+                {entry.status !== null && (
+                  <span
+                    className={clsx('shrink-0 font-bold font-mono', statusColor(entry.status))}
+                    style={{ fontSize: 11 }}
+                  >
+                    {entry.status}
+                  </span>
+                )}
+
+                {/* Latency */}
+                {entry.latency !== null && (
+                  <span className="text-text-secondary shrink-0 font-mono" style={{ fontSize: 11 }}>
+                    {entry.latency}ms
+                  </span>
+                )}
+
+                {/* Summary */}
+                <span
+                  className={clsx(
+                    'shrink-0 truncate max-w-[140px]',
+                    entry.error ? 'text-dd-red' : 'text-text-secondary'
+                  )}
+                  style={{ fontSize: 10 }}
+                  title={entry.summary}
+                >
+                  {entry.summary}
+                </span>
+              </div>
+            ))
+          )}
+          <div ref={bottomRef} />
+        </div>
       </div>
-    </div>
+
+      {/* Modal */}
+      {selected && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+          onClick={() => setSelected(null)}
+        >
+          <div
+            className="w-full max-w-lg rounded-lg overflow-hidden"
+            style={{
+              background: '#1A1D27',
+              border: '1px solid #2A2D3A',
+              boxShadow: '0 8px 40px rgba(0,0,0,0.6)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <div
+              className="flex items-center justify-between px-4 py-3"
+              style={{ borderBottom: '1px solid #2A2D3A', background: 'rgba(42,45,58,0.4)' }}
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className="font-semibold text-xs"
+                  style={{ color: selected.method === 'GET' ? '#00C389' : '#9D78FF' }}
+                >
+                  {selected.method}
+                </span>
+                <span className="text-sm font-mono text-text-primary">
+                  {selected.endpoint.replace(BACKEND_URL, '')}
+                </span>
+              </div>
+              <button
+                onClick={() => setSelected(null)}
+                className="text-text-secondary hover:text-text-primary transition-colors text-lg leading-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal body */}
+            <div className="p-4 space-y-3">
+              <div className="flex gap-6 text-xs">
+                <div>
+                  <span className="text-text-secondary">Status </span>
+                  <span className={clsx('font-bold font-mono', selected.status ? statusColor(selected.status) : '')}>
+                    {selected.status ?? '—'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-text-secondary">Latency </span>
+                  <span className="font-mono text-text-primary">{selected.latency ?? '—'}ms</span>
+                </div>
+                <div>
+                  <span className="text-text-secondary">Time </span>
+                  <span className="font-mono text-text-primary">{selected.ts}</span>
+                </div>
+              </div>
+
+              <div>
+                <div className="text-xs text-text-secondary mb-1">URL</div>
+                <div
+                  className="text-xs font-mono break-all px-2 py-1.5 rounded"
+                  style={{ background: 'rgba(42,45,58,0.6)', color: '#9D78FF' }}
+                >
+                  {selected.endpoint}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-xs text-text-secondary mb-1">Response</div>
+                <div
+                  className="text-xs font-mono whitespace-pre-wrap break-all px-3 py-2 rounded max-h-60 overflow-y-auto"
+                  style={{ background: 'rgba(42,45,58,0.6)' }}
+                  dangerouslySetInnerHTML={{
+                    __html: (() => {
+                      try { return syntaxHighlight(JSON.stringify(JSON.parse(selected.summary), null, 2)) }
+                      catch { return selected.summary }
+                    })()
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
