@@ -3,24 +3,21 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import clsx from 'clsx'
 import {
-  Play,
-  Square,
   RefreshCw,
   Trash2,
   ChevronDown,
   ChevronUp,
-  Activity,
   Zap,
   Database,
   Cpu,
   HardDrive,
   GitBranch,
-  BarChart3,
   Terminal,
   Send,
   CheckCircle,
   XCircle,
   Clock,
+  Repeat,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -62,30 +59,11 @@ interface StressState {
   loading: { cpu: boolean; memory: boolean; db: boolean }
 }
 
-interface TrafficState {
-  running: boolean
-  flow: string
-  batchSize: number
-  interval: number
-  sent: number
-  success: number
-  errors: number
-}
-
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080'
-
-const FLOW_OPTIONS = [
-  { value: '1', label: 'Flow 1 — Correct Path' },
-  { value: '2', label: 'Flow 2 — DB Not Found' },
-  { value: '3s', label: 'Flow 3 — Compute Success' },
-  { value: '3t', label: 'Flow 3 — Compute Timeout' },
-  { value: '4', label: 'Flow 4 — Create Item' },
-  { value: 'cascade', label: 'Flow — Cascade' },
-]
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -705,182 +683,6 @@ function ResponseLog({
 }
 
 // ---------------------------------------------------------------------------
-// Traffic Generator
-// ---------------------------------------------------------------------------
-
-interface TrafficGeneratorProps {
-  state: TrafficState
-  onChange: (patch: Partial<TrafficState>) => void
-  onStart: () => void
-  onStop: () => void
-}
-
-function TrafficGenerator({ state, onChange, onStart, onStop }: TrafficGeneratorProps) {
-  const total = state.sent
-  const successPct = total > 0 ? Math.round((state.success / total) * 100) : 0
-  const errorPct = total > 0 ? Math.round((state.errors / total) * 100) : 0
-
-  return (
-    <div
-      className="rounded-lg p-5 flex flex-col gap-4"
-      style={{
-        background: '#1A1D27',
-        border: '1px solid #2A2D3A',
-        boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
-      }}
-    >
-      {/* Controls grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Flow selector */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs text-text-secondary font-medium">Target Flow</label>
-          <select
-            value={state.flow}
-            onChange={(e) => onChange({ flow: e.target.value })}
-            disabled={state.running}
-            className="rounded-lg px-3 py-2 text-sm text-text-primary font-medium disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-dd-purple"
-            style={{
-              background: '#0F1117',
-              border: '1px solid #2A2D3A',
-              WebkitAppearance: 'none',
-            }}
-          >
-            {FLOW_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Batch size */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs text-text-secondary font-medium">
-            Batch Size <span className="text-text-secondary">(1–50)</span>
-          </label>
-          <input
-            type="number"
-            min={1}
-            max={50}
-            value={state.batchSize}
-            onChange={(e) => onChange({ batchSize: Math.min(50, Math.max(1, parseInt(e.target.value) || 1)) })}
-            disabled={state.running}
-            className="rounded-lg px-3 py-2 text-sm text-text-primary font-mono disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-dd-purple"
-            style={{ background: '#0F1117', border: '1px solid #2A2D3A' }}
-          />
-        </div>
-
-        {/* Interval */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs text-text-secondary font-medium">
-            Interval <span className="text-text-secondary">(ms)</span>
-          </label>
-          <input
-            type="number"
-            min={100}
-            max={5000}
-            step={100}
-            value={state.interval}
-            onChange={(e) => onChange({ interval: Math.min(5000, Math.max(100, parseInt(e.target.value) || 500)) })}
-            disabled={state.running}
-            className="rounded-lg px-3 py-2 text-sm text-text-primary font-mono disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-dd-purple"
-            style={{ background: '#0F1117', border: '1px solid #2A2D3A' }}
-          />
-        </div>
-      </div>
-
-      {/* Start/Stop + counters */}
-      <div className="flex items-center gap-4 flex-wrap">
-        <button
-          onClick={state.running ? onStop : onStart}
-          className="btn-primary flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold"
-          style={{
-            background: state.running
-              ? 'linear-gradient(135deg, #FF4B4B, #cc3333)'
-              : 'linear-gradient(135deg, #7B4FFF, #9D78FF)',
-            color: 'white',
-          }}
-        >
-          {state.running ? (
-            <>
-              <Square size={14} />
-              Stop Traffic
-            </>
-          ) : (
-            <>
-              <Play size={14} />
-              Start Traffic
-            </>
-          )}
-        </button>
-
-        {/* Counters */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5">
-            <Activity size={13} className="text-text-secondary" />
-            <span className="text-xs text-text-secondary">Sent:</span>
-            <span className="text-xs font-bold font-mono text-text-primary">{state.sent}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <CheckCircle size={13} className="text-dd-green" />
-            <span className="text-xs text-text-secondary">OK:</span>
-            <span className="text-xs font-bold font-mono text-dd-green">{state.success}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <XCircle size={13} className="text-dd-red" />
-            <span className="text-xs text-text-secondary">Err:</span>
-            <span className="text-xs font-bold font-mono text-dd-red">{state.errors}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Progress bar */}
-      {total > 0 && (
-        <div className="flex flex-col gap-1.5 animate-fade-in">
-          <div className="flex justify-between text-xs text-text-secondary">
-            <span>{successPct}% success</span>
-            <span>{errorPct}% error</span>
-          </div>
-          <div className="relative h-2 rounded-full overflow-hidden" style={{ background: '#2A2D3A' }}>
-            {/* Success portion */}
-            <div
-              className="absolute left-0 top-0 h-full rounded-full transition-all duration-500"
-              style={{
-                width: `${successPct}%`,
-                background: 'linear-gradient(90deg, #00C389, #00E5A0)',
-              }}
-            />
-            {/* Error portion */}
-            <div
-              className="absolute top-0 h-full rounded-full transition-all duration-500"
-              style={{
-                left: `${successPct}%`,
-                width: `${errorPct}%`,
-                background: 'linear-gradient(90deg, #FF4B4B, #FF6B6B)',
-              }}
-            />
-            {/* Running shimmer */}
-            {state.running && (
-              <div
-                className="absolute inset-0 opacity-30 progress-shimmer"
-                style={{ borderRadius: 9999 }}
-              />
-            )}
-          </div>
-        </div>
-      )}
-
-      {state.running && (
-        <div className="flex items-center gap-2 text-xs text-dd-amber animate-fade-in">
-          <div className="w-1.5 h-1.5 rounded-full bg-dd-amber animate-pulse" />
-          Traffic generator active — sending every {state.interval}ms
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // Section Header
 // ---------------------------------------------------------------------------
 
@@ -938,6 +740,7 @@ type FlowKey =
   | 'errorFlaky'
   | 'errorChaos'
   | 'errorSlowFail'
+  | 'flow10'
 
 interface FlowDefinition {
   title: string
@@ -1006,6 +809,12 @@ const FLOW_DEFINITIONS: Record<FlowKey, FlowDefinition> = {
     description: 'nginx → Go backend → Express GET /error/slow-fail → Express sleeps 300–1500ms, then 40% → 500 or 60% → 200 → Go propagates status and delay_ms.',
     method: 'GET',
     endpoint: `${BACKEND_URL}/api/error/slow-fail`,
+  },
+  flow10: {
+    title: 'Flow 10 — E-Commerce Checkout',
+    description: 'Navigates to /shop. Promo verify: nginx → Go → Java GET /promo/verify/:code → Postgres promo_codes. Checkout: nginx → Go POST /api/flow/10/checkout → intentional 500.',
+    method: 'GET',
+    endpoint: `${BACKEND_URL}/api/flow/10/checkout`,
   },
 }
 
@@ -1127,6 +936,11 @@ export default function Dashboard() {
 
   const handleFlowSend = useCallback(
     async (key: FlowKey) => {
+      if (key === 'flow10') {
+        window.location.href = '/shop'
+        return
+      }
+
       const def = FLOW_DEFINITIONS[key]
       setFlowStates((prev) => ({
         ...prev,
@@ -1156,6 +970,35 @@ export default function Dashboard() {
       [key]: { ...prev[key], expanded: !prev[key].expanded },
     }))
   }, [])
+
+  // -- Traffic generator state
+  const [trafficRunning, setTrafficRunning] = useState(false)
+  const [trafficLoading, setTrafficLoading] = useState(false)
+  const [trafficAvailable, setTrafficAvailable] = useState(false)
+
+  const refreshTrafficStatus = useCallback(async () => {
+    const { data, status } = await doFetch(`${BACKEND_URL}/api/traffic/status`, 'GET')
+    if (status >= 200 && status < 300 && data && typeof data === 'object') {
+      setTrafficAvailable(true)
+      setTrafficRunning(Boolean((data as Record<string, unknown>).running))
+    } else {
+      setTrafficAvailable(false)
+    }
+  }, [doFetch])
+
+  const toggleTraffic = useCallback(async () => {
+    setTrafficLoading(true)
+    const action = trafficRunning ? 'stop' : 'start'
+    const optimistic = !trafficRunning
+    setTrafficRunning(optimistic)
+    await doFetch(`${BACKEND_URL}/api/traffic/${action}`, 'POST')
+    await refreshTrafficStatus()
+    setTrafficLoading(false)
+  }, [trafficRunning, doFetch, refreshTrafficStatus])
+
+  useEffect(() => {
+    refreshTrafficStatus()
+  }, [refreshTrafficStatus])
 
   // -- Stress states
   const [stress, setStress] = useState<StressState>({
@@ -1203,94 +1046,6 @@ export default function Dashboard() {
     },
     [stress, doFetch, refreshStressStatus]
   )
-
-  // -- Traffic generator
-  const [traffic, setTraffic] = useState<TrafficState>({
-    running: false,
-    flow: '1',
-    batchSize: 5,
-    interval: 500,
-    sent: 0,
-    success: 0,
-    errors: 0,
-  })
-  const trafficRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const trafficActiveRef = useRef(false)
-
-  const getTrafficUrl = (flow: string): { url: string; method: string } => {
-    switch (flow) {
-      case '1': return { url: `${BACKEND_URL}/api/flow/1`, method: 'GET' }
-      case '2': return { url: `${BACKEND_URL}/api/flow/2`, method: 'GET' }
-      case '3s': return { url: `${BACKEND_URL}/api/flow/3/success`, method: 'GET' }
-      case '3t': return { url: `${BACKEND_URL}/api/flow/3/timeout`, method: 'GET' }
-      case '4': return { url: `${BACKEND_URL}/api/flow/4`, method: 'POST' }
-      case 'cascade': return { url: `${BACKEND_URL}/api/flow/cascade`, method: 'GET' }
-      default: return { url: `${BACKEND_URL}/api/flow/1`, method: 'GET' }
-    }
-  }
-
-  const runTrafficBatch = useCallback(
-    async (flow: string, batchSize: number, interval: number) => {
-      if (!trafficActiveRef.current) return
-
-      const { url, method } = getTrafficUrl(flow)
-      const promises = Array.from({ length: batchSize }, () => doFetch(url, method))
-      const results = await Promise.allSettled(promises)
-
-      if (!trafficActiveRef.current) return
-
-      let batchSuccess = 0
-      let batchErrors = 0
-      results.forEach((r) => {
-        if (r.status === 'fulfilled') {
-          const { status, error } = r.value
-          if (!error && status >= 200 && status < 300) batchSuccess++
-          else batchErrors++
-        } else {
-          batchErrors++
-        }
-      })
-
-      setTraffic((prev) => ({
-        ...prev,
-        sent: prev.sent + batchSize,
-        success: prev.success + batchSuccess,
-        errors: prev.errors + batchErrors,
-      }))
-
-      if (trafficActiveRef.current) {
-        trafficRef.current = setTimeout(
-          () => runTrafficBatch(flow, batchSize, interval),
-          interval
-        )
-      }
-    },
-    [doFetch]
-  )
-
-  const stopTraffic = useCallback(() => {
-    trafficActiveRef.current = false
-    if (trafficRef.current) clearTimeout(trafficRef.current)
-    setTraffic((prev) => ({ ...prev, running: false }))
-  }, [])
-
-  useEffect(() => {
-    return () => {
-      trafficActiveRef.current = false
-      if (trafficRef.current) clearTimeout(trafficRef.current)
-    }
-  }, [])
-
-  // Re-trigger traffic loop when start is called
-  const handleStartTraffic = useCallback(() => {
-    trafficActiveRef.current = true
-    setTraffic((prev) => {
-      const next = { ...prev, running: true, sent: 0, success: 0, errors: 0 }
-      // Kick off loop
-      setTimeout(() => runTrafficBatch(next.flow, next.batchSize, next.interval), 0)
-      return next
-    })
-  }, [runTrafficBatch])
 
   // ---------------------------------------------------------------------------
   // Render
@@ -1385,34 +1140,101 @@ export default function Dashboard() {
         </section>
 
         {/* ------------------------------------------------------------------ */}
-        {/* Section 3: Traffic Generator + Section 4: Response Log (side by side) */}
+        {/* Section 3: Traffic Generator */}
         {/* ------------------------------------------------------------------ */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
-          {/* Traffic Generator */}
-          <section>
-            <SectionHeader
-              icon={<BarChart3 size={16} />}
-              title="Traffic Generator"
-              subtitle="Automate batched requests to stress-test endpoints"
-            />
-            <TrafficGenerator
-              state={traffic}
-              onChange={(patch) => setTraffic((prev) => ({ ...prev, ...patch }))}
-              onStart={handleStartTraffic}
-              onStop={stopTraffic}
-            />
-          </section>
+        <section className="mb-10">
+          <SectionHeader
+            icon={<Repeat size={16} />}
+            title="Traffic Generator"
+            subtitle="Puppeteer — simulates realistic browser journeys across all flows"
+            action={
+              <button
+                onClick={refreshTrafficStatus}
+                className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-dd-purple-light transition-colors px-3 py-1.5 rounded-lg"
+                style={{ border: '1px solid #2A2D3A', background: 'rgba(42,45,58,0.4)' }}
+              >
+                <RefreshCw size={12} />
+                Refresh
+              </button>
+            }
+          />
 
-          {/* Response Log */}
-          <section>
-            <SectionHeader
-              icon={<Terminal size={16} />}
-              title="Response Log"
-              subtitle="Live feed of all outbound requests from this dashboard"
-            />
-            <ResponseLog entries={log} onClear={() => setLog([])} />
-          </section>
-        </div>
+          <div
+            className={clsx('rounded-lg p-5 flex flex-col gap-4 transition-all duration-200')}
+            style={{
+              background: '#1A1D27',
+              border: !trafficAvailable
+                ? '1px solid #2A2D3A'
+                : trafficRunning
+                ? '1px solid rgba(0,195,137,0.4)'
+                : '1px solid #2A2D3A',
+              boxShadow: trafficRunning ? '0 4px 24px rgba(0,195,137,0.08)' : '0 4px 24px rgba(0,0,0,0.4)',
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div
+                  className="p-2 rounded-lg"
+                  style={{
+                    background: trafficRunning ? 'rgba(0,195,137,0.15)' : 'rgba(42,45,58,0.5)',
+                    color: trafficRunning ? '#00C389' : '#8B8FA8',
+                  }}
+                >
+                  <Repeat size={16} />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-text-primary">Puppeteer Browser Bot</div>
+                  <div className="text-xs text-text-secondary mt-0.5">
+                    Randomly runs Flows 1–10 in a headless browser. Flow 10 simulates 3 user journeys with random drop-off.
+                  </div>
+                </div>
+              </div>
+              {!trafficAvailable ? (
+                <span className="text-xs text-text-secondary px-3 py-1.5 rounded-lg" style={{ background: 'rgba(42,45,58,0.5)' }}>
+                  Not running
+                </span>
+              ) : trafficLoading ? (
+                <Spinner size={20} />
+              ) : (
+                <ToggleSwitch checked={trafficRunning} onChange={toggleTraffic} />
+              )}
+            </div>
+
+            <div
+              className="flex items-center gap-2 px-3 py-2 rounded-lg"
+              style={{ background: 'rgba(15,17,23,0.6)', border: '1px solid #2A2D3A' }}
+            >
+              <div
+                className={clsx(
+                  'w-2 h-2 rounded-full',
+                  !trafficAvailable ? 'bg-text-secondary' : trafficRunning ? 'bg-green-400 animate-pulse' : 'bg-text-secondary'
+                )}
+              />
+              <span
+                className="text-xs font-semibold tracking-wide"
+                style={{ color: !trafficAvailable ? '#8B8FA8' : trafficRunning ? '#00C389' : '#8B8FA8' }}
+              >
+                {!trafficAvailable
+                  ? 'CONTAINER NOT ACTIVE — start with --profile traffic'
+                  : trafficRunning
+                  ? 'ACTIVE — GENERATING TRAFFIC'
+                  : 'IDLE — TOGGLE ON TO START'}
+              </span>
+            </div>
+          </div>
+        </section>
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Section 4: Response Log */}
+        {/* ------------------------------------------------------------------ */}
+        <section className="mb-10">
+          <SectionHeader
+            icon={<Terminal size={16} />}
+            title="Response Log"
+            subtitle="Live feed of all outbound requests from this dashboard"
+          />
+          <ResponseLog entries={log} onClear={() => setLog([])} />
+        </section>
 
         {/* Footer */}
         <footer className="text-center text-xs text-text-secondary py-4" style={{ borderTop: '1px solid #2A2D3A' }}>

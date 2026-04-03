@@ -6,14 +6,73 @@ networks:
 
 volumes:
   postgres_data:
+  mongodb_data:
 
 services:
+
+  # ---------------------------------------------------------------------------
+  # Datadog Agent
+  # ---------------------------------------------------------------------------
+  datadog-agent:
+    image: registry.datadoghq.com/agent:latest
+    profiles: ["observability"]
+    environment:
+      # API Configuration
+      - DD_API_KEY=${DD_API_KEY}
+      - DD_HOSTNAME=${DD_HOSTNAME}
+      # Global Environment
+      - DD_ENV=qa
+      # Container Log Collection
+      - DD_LOGS_ENABLED=true
+      - DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL=true
+      # Container Metrics Collection
+      - DD_PROCESS_AGENT_ENABLED=true
+      - DD_CONTAINER_LABELS_AS_TAGS={"my.custom.label.team":"team"}
+      # NEW! APM Configuration
+      # - DD_APM_NON_LOCAL_TRAFFIC=true
+      # - DD_APM_ENABLED=true
+      # - DD_DOGSTATSD_NON_LOCAL_TRAFFIC=true
+      # - DD_SYSTEM_PROBE_NETWORK_ENABLED=true
+      # - DD_SYSTEM_PROBE_SERVICE_MONITORING_ENABLED=true
+      - DD_TAGS=group:gridDog
+      # HOST_ROOT=/host/root identifies the volume mount path for the host's filesystem root. This corresponds to - /:/host/root:ro in the volumes block. This is required for USM.
+      # - HOST_ROOT='/host/root'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc/:/host/proc/:ro
+      - /sys/fs/cgroup/:/host/sys/fs/cgroup:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      # - /sys/kernel/debug:/sys/kernel/debug
+      # - /:/host/root:ro
+      # - /etc/passwd:/etc/passwd:ro
+      # - /etc/group:/etc/group:ro
+      # - /etc/os-release:/etc/os-release
+    # cap_add and security_op give the Agent container heightened privileges for kernel-level monitoring. This is required for USM and CNM.
+    # cap_add:
+      # - SYS_ADMIN
+      # - SYS_RESOURCE
+      # - SYS_PTRACE
+      #  - NET_ADMIN
+      # - NET_BROADCAST
+      # - NET_RAW
+      # - IPC_LOCK
+      # - CHOWN
+    # security_opt:
+      # - apparmor:unconfined
+    # id: "host"
+    labels:
+      # Datadog autodiscovery for log collection and container metrics
+      com.datadoghq.ad.logs: '[{"source": "docker", "service": "datadog-agent", "env": "qa", "version": "griddog-1.0"}]'
+      # com.datadoghq.ad.tags: '["service:datadog-agent", "env:qa", "version:griddog-1.0"]'
+    networks:
+      - griddog
 
   # ---------------------------------------------------------------------------
   # PostgreSQL 15
   # ---------------------------------------------------------------------------
   postgres:
     image: postgres:15
+    profiles: ["default"]
     container_name: griddog-postgres
     restart: unless-stopped
     environment:
@@ -35,8 +94,12 @@ services:
     networks:
       - griddog
     labels:
-      com.griddog.service: postgres
-      com.griddog.region: local
+      com.datadoghq.ad.check_names: '["postgres"]'
+      com.datadoghq.ad.init_configs: '[{}]'
+      com.datadoghq.ad.instances: '[{"host":"%%host%%", "port":5432, "username":"griddog", "password":"griddog"}]'
+      com.datadoghq.tags.version: '13'
+      com.datadoghq.ad.logs: '[{"source": "postgresql"}]'
+      com.datadoghq.tags.service: 'postgres'
 
   # ---------------------------------------------------------------------------
   # Backend – Golang
@@ -46,13 +109,18 @@ services:
       context: ../../backend
       dockerfile: Dockerfile
     image: griddog/backend:latest
+    profiles: ["default"]
     container_name: griddog-backend
     restart: unless-stopped
     environment:
       PORT: "8080"
       JAVA_SERVICE_URL: http://java-service:8081
       EXPRESS_SERVICE_URL: http://express-service:3001
+      TRAFFIC_SERVICE_URL: http://traffic:3002
       DATABASE_URL: postgres://griddog:griddog@postgres:5432/griddog?sslmode=disable
+      DD_AGENT_HOST: datadog-agent
+      DD_SERVICE: golang-backend
+      DD_VERSION: 1.0.0
     depends_on:
       postgres:
         condition: service_healthy
@@ -66,8 +134,8 @@ services:
     networks:
       - griddog
     labels:
-      com.griddog.service: backend
-      com.griddog.region: local
+      my.custom.label.team: 'golang-backend-team'
+      com.datadoghq.ad.logs: '[{"source": "go"}]'
     deploy:
       resources:
         limits:
@@ -82,6 +150,7 @@ services:
       context: ../../java-service
       dockerfile: Dockerfile
     image: griddog/java-service:latest
+    profiles: ["default"]
     container_name: griddog-java-service
     restart: unless-stopped
     environment:
@@ -89,6 +158,9 @@ services:
       DATABASE_URL: jdbc:postgresql://postgres:5432/griddog
       DB_USER: griddog
       DB_PASSWORD: griddog
+      # DD_AGENT_HOST: datadog-agent
+      # DD_SERVICE: java-service
+      # DD_VERSION: 1.0.0
     ports:
       - "8081:8081"
     depends_on:
@@ -104,13 +176,37 @@ services:
     networks:
       - griddog
     labels:
-      com.griddog.service: java-service
-      com.griddog.region: local
+      my.custom.label.team: 'java-backend-team'
+      com.datadoghq.ad.logs: '[{"source": "java"}]'
     deploy:
       resources:
         limits:
           cpus: "1"
           memory: 768m
+
+  # ---------------------------------------------------------------------------
+  # MongoDB 7
+  # ---------------------------------------------------------------------------
+  mongodb:
+    image: mongo:7
+    profiles: ["default"]
+    container_name: griddog-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5m
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+      start_interval: 10s
+    networks:
+      - griddog
+    labels:
+      com.datadoghq.ad.logs: '[{"source": "mongodb"}]'
 
   # ---------------------------------------------------------------------------
   # Express Service – Node.js / Express.js
@@ -120,14 +216,18 @@ services:
       context: ../../express-service
       dockerfile: Dockerfile
     image: griddog/express-service:latest
+    profiles: ["default"]
     container_name: griddog-express-service
     restart: unless-stopped
     environment:
       PORT: "3001"
+      MONGODB_URI: mongodb://mongodb:27017/griddog
     ports:
       - "3001:3001"
     depends_on:
       postgres:
+        condition: service_healthy
+      mongodb:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
@@ -139,8 +239,8 @@ services:
     networks:
       - griddog
     labels:
-      com.griddog.service: express-service
-      com.griddog.region: local
+      my.custom.label.team: 'express-team'
+      com.datadoghq.ad.logs: '[{"source": "nodejs"}]'
     deploy:
       resources:
         limits:
@@ -157,10 +257,14 @@ services:
       args:
         NEXT_PUBLIC_BACKEND_URL: http://localhost             # local dev — change to EC2 public IP/DNS on server
     image: griddog/frontend:latest
+    profiles: ["default"]
     container_name: griddog-frontend
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_BACKEND_URL: http://localhost               # local dev — change to EC2 public IP/DNS on server
+      DD_AGENT_HOST: datadog-agent
+      DD_SERVICE: frontend-service
+      DD_VERSION: 1.0.0
     depends_on:
       backend:
         condition: service_healthy
@@ -174,8 +278,10 @@ services:
     networks:
       - griddog
     labels:
-      com.griddog.service: frontend
-      com.griddog.region: local
+      my.custom.label.team: 'frontend-team'
+      com.datadoghq.ad.logs: '[{"source": "nodejs"}]'
+      # https://docs.datadoghq.com/containers/docker/log/?tab=containerinstallation#examples
+      # https://docs.datadoghq.com/logs/log_collection/nodejs/?tab=winston30
     deploy:
       resources:
         limits:
@@ -187,6 +293,7 @@ services:
   # ---------------------------------------------------------------------------
   nginx:
     image: nginx:alpine
+    profiles: ["default"]
     container_name: griddog-nginx
     restart: unless-stopped
     ports:
@@ -198,8 +305,37 @@ services:
         condition: service_healthy
       backend:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 80 || exit 1"]
+      interval: 5m
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+      start_interval: 5s
     networks:
       - griddog
     labels:
-      com.griddog.service: nginx
-      com.griddog.region: local
+      my.custom.label.team: 'infra-team'
+      com.datadoghq.tags.service: 'nginx'
+      com.datadoghq.tags.version: '1.0.0'
+      com.datadoghq.ad.logs: '[{"source": "nginx"}]'
+
+  # ---------------------------------------------------------------------------
+  # Traffic Generator – Puppeteer (profile: traffic)
+  # Start: docker compose --profile default --profile traffic up
+  # ---------------------------------------------------------------------------
+  traffic:
+    build:
+      context: ../../traffic
+      dockerfile: Dockerfile
+    image: griddog/traffic:latest
+    profiles: ["traffic"]
+    container_name: griddog-traffic
+    restart: unless-stopped
+    environment:
+      TRAFFIC_BASE_URL: http://nginx
+    depends_on:
+      nginx:
+        condition: service_started
+    networks:
+      - griddog

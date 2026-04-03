@@ -61,6 +61,32 @@ func getEnv(key, fallback string) string {
 // Structured logger helpers
 // ---------------------------------------------------------------------------
 
+// routeLabel maps "METHOD /gin/route/pattern" to a human-readable description
+// used as the log message for every completed request instead of the generic
+// "request completed" string.
+var routeLabel = map[string]string{
+	"GET /api/flow/1":               "flow1: java → postgres — GET item by id",
+	"GET /api/flow/2":               "flow2: java → postgres — GET item/9999 (expected 404)",
+	"GET /api/flow/3/success":       "flow3/success: express — fibonacci compute",
+	"GET /api/flow/3/timeout":       "flow3/timeout: express — intentional 15s delay",
+	"POST /api/flow/4":              "flow4: java → postgres — INSERT new item",
+	"GET /api/flow/cascade":         "flow/cascade: java GET /items/1 → express GET /compute",
+	"GET /api/flow/10/promo/:code":  "flow10/promo: java → postgres — promo code lookup",
+	"POST /api/flow/10/checkout":    "flow10/checkout: intentional 500 — payment gateway failure",
+	"GET /api/shop/items":           "shop/items: go → express → mongodb — fetch shop catalogue",
+	"GET /api/items":                "flow6/items: java → postgres — list all items",
+	"GET /api/error/flaky":          "flow7/flaky: java — 50% random failure",
+	"GET /api/error/chaos":          "flow8/chaos: express — random status 200/429/500/503",
+	"GET /api/error/slow-fail":      "flow9/slow-fail: express — 40% failure + artificial delay",
+	"GET /api/stress/cpu":           "stress/cpu: toggle CPU stressor",
+	"GET /api/stress/memory":        "stress/memory: toggle memory stressor",
+	"GET /api/stress/db":            "stress/db: toggle DB stressor",
+	"GET /api/stress/status":        "stress/status: stressor state",
+	"GET /api/traffic/status":       "traffic/status: generator state",
+	"POST /api/traffic/start":       "traffic/start: start traffic generator",
+	"POST /api/traffic/stop":        "traffic/stop: stop traffic generator",
+}
+
 func requestLogger(logger *slog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
@@ -88,14 +114,25 @@ func requestLogger(logger *slog.Logger) gin.HandlerFunc {
 			logLevel = slog.LevelWarn
 		}
 
-		logger.LogAttrs(context.Background(), logLevel, "request completed",
+		msg := routeLabel[c.Request.Method+" "+c.FullPath()]
+		if msg == "" {
+			msg = c.Request.Method + " " + c.Request.URL.Path
+		}
+
+		base := []slog.Attr{
 			slog.String("request_id", requestID),
 			slog.String("method", c.Request.Method),
 			slog.String("path", c.Request.URL.Path),
 			slog.Int("status", status),
 			slog.String("duration", duration.String()),
 			slog.String("client_ip", c.ClientIP()),
-		)
+		}
+		if extra, exists := c.Get("log_attrs"); exists {
+			if extraAttrs, ok := extra.([]slog.Attr); ok {
+				base = append(base, extraAttrs...)
+			}
+		}
+		logger.LogAttrs(context.Background(), logLevel, msg, base...)
 	}
 }
 
@@ -128,6 +165,13 @@ func getRequestID(c *gin.Context) string {
 		}
 	}
 	return ""
+}
+
+// setLogFields deposits extra slog attributes onto the Gin context so that
+// requestLogger can append them to the final "request completed" log line.
+// Call this from any handler to enrich the audit log with business context.
+func setLogFields(c *gin.Context, attrs ...slog.Attr) {
+	c.Set("log_attrs", attrs)
 }
 
 // ---------------------------------------------------------------------------
@@ -168,12 +212,28 @@ func doRequest(ctx context.Context, logger *slog.Logger, method, url string, bod
 		return nil, resp.StatusCode, fmt.Errorf("read response body: %w", readErr)
 	}
 
-	logger.Info("outbound call completed",
-		slog.String("target_url", url),
-		slog.String("method", method),
-		slog.Int("status", resp.StatusCode),
-		slog.String("duration", duration.String()),
-	)
+	// For non-2xx responses, log the status and a body excerpt so the error
+	// is visible even when the calling handler doesn't explicitly handle it.
+	// 2xx responses are not logged here — each handler logs with business context.
+	if resp.StatusCode >= 400 {
+		excerpt := string(data)
+		if len(excerpt) > 300 {
+			excerpt = excerpt[:300] + "…"
+		}
+		lvl := slog.LevelWarn
+		msg := "upstream returned client error"
+		if resp.StatusCode >= 500 {
+			lvl = slog.LevelError
+			msg = "upstream returned server error"
+		}
+		logger.LogAttrs(ctx, lvl, msg,
+			slog.String("target_url", url),
+			slog.String("method", method),
+			slog.Int("status", resp.StatusCode),
+			slog.String("duration", duration.String()),
+			slog.String("response_body", excerpt),
+		)
+	}
 
 	return data, resp.StatusCode, nil
 }
@@ -216,6 +276,17 @@ func flow1Handler(javaURL string) gin.HandlerFunc {
 			c.Data(http.StatusOK, "application/json", data)
 			return
 		}
+		logger.Info("flow1: item fetched from postgres",
+			slog.Any("item_id", result["id"]),
+			slog.Any("item_name", result["name"]),
+			slog.Any("item_value", result["value"]),
+			slog.Int("upstream_status", status),
+		)
+		setLogFields(c,
+			slog.Any("item_id", result["id"]),
+			slog.Any("item_name", result["name"]),
+			slog.Any("item_value", result["value"]),
+		)
 		c.JSON(http.StatusOK, result)
 	}
 }
@@ -236,9 +307,18 @@ func flow2Handler(javaURL string) gin.HandlerFunc {
 			return
 		}
 
-		logger.Warn("flow2: propagating upstream status",
+		var errBody map[string]interface{}
+		_ = json.Unmarshal(data, &errBody)
+		logger.Info("flow2: db not-found propagated as expected",
+			slog.Int("item_id_queried", 9999),
 			slog.Int("upstream_status", status),
 			slog.String("upstream_url", target),
+		)
+		setLogFields(c,
+			slog.Int("item_id_queried", 9999),
+			slog.Int("upstream_status", status),
+			slog.Any("upstream_error", errBody["error"]),
+			slog.Any("upstream_message", errBody["message"]),
 		)
 		c.Data(status, "application/json", data)
 	}
@@ -269,6 +349,15 @@ func flow3SuccessHandler(expressURL string) gin.HandlerFunc {
 			c.Data(http.StatusOK, "application/json", data)
 			return
 		}
+		logger.Info("flow3/success: compute result received from express",
+			slog.Any("compute_result", result["result"]),
+			slog.Any("compute_time_ms", result["computeTime"]),
+			slog.Int("upstream_status", status),
+		)
+		setLogFields(c,
+			slog.Any("compute_result", result["result"]),
+			slog.Any("compute_time_ms", result["computeTime"]),
+		)
 		c.JSON(http.StatusOK, result)
 	}
 }
@@ -298,8 +387,13 @@ func flow3TimeoutHandler(expressURL string) gin.HandlerFunc {
 			return
 		}
 
-		logger.Warn("flow3/timeout: upstream responded",
+		logger.Info("flow3/timeout: delayed response received from express",
 			slog.Int("upstream_status", status),
+			slog.String("note", "intentional 15s sleep in express-service"),
+		)
+		setLogFields(c,
+			slog.Int("upstream_status", status),
+			slog.String("note", "intentional 15s sleep in express-service"),
 		)
 		c.Data(status, "application/json", data)
 	}
@@ -332,6 +426,19 @@ func flow4Handler(javaURL string) gin.HandlerFunc {
 			c.Data(status, "application/json", data)
 			return
 		}
+		logger.Info("flow4: item inserted into postgres",
+			slog.Any("item_id", result["id"]),
+			slog.Any("item_name", result["name"]),
+			slog.Any("item_value", result["value"]),
+			slog.Any("created_at", result["created_at"]),
+			slog.Int("upstream_status", status),
+		)
+		setLogFields(c,
+			slog.Any("item_id", result["id"]),
+			slog.Any("item_name", result["name"]),
+			slog.Any("item_value", result["value"]),
+			slog.Any("created_at", result["created_at"]),
+		)
 		c.JSON(status, result)
 	}
 }
@@ -373,6 +480,13 @@ func flowCascadeHandler(javaURL, expressURL string) gin.HandlerFunc {
 		}
 
 		response["java"] = javaResult
+		if javaMap, ok := javaResult.(map[string]interface{}); ok {
+			logger.Info("cascade: java step completed",
+				slog.Any("item_id", javaMap["id"]),
+				slog.Any("item_name", javaMap["name"]),
+				slog.Int("java_status", javaStatus),
+			)
+		}
 
 		// Step 2: call Express /compute only if Java succeeded
 		expressData, expressStatus, expressErr := doRequest(c.Request.Context(), logger, http.MethodGet, expressURL+"/compute", nil, 10)
@@ -390,6 +504,23 @@ func flowCascadeHandler(javaURL, expressURL string) gin.HandlerFunc {
 			expressResult = string(expressData)
 		}
 
+		if expressMap, ok := expressResult.(map[string]interface{}); ok {
+			logger.Info("cascade: express compute completed",
+				slog.Any("compute_result", expressMap["result"]),
+				slog.Any("compute_time_ms", expressMap["computeTime"]),
+				slog.Int("express_status", expressStatus),
+			)
+			if javaMap, ok2 := javaResult.(map[string]interface{}); ok2 {
+				setLogFields(c,
+					slog.Any("java_item_id", javaMap["id"]),
+					slog.Any("java_item_name", javaMap["name"]),
+					slog.Int("java_status", javaStatus),
+					slog.Any("express_compute_result", expressMap["result"]),
+					slog.Any("express_compute_time_ms", expressMap["computeTime"]),
+					slog.Int("express_status", expressStatus),
+				)
+			}
+		}
 		response["express"] = gin.H{"status": expressStatus, "body": expressResult}
 		c.JSON(http.StatusOK, response)
 	}
@@ -405,11 +536,100 @@ func errorFlakyHandler(javaURL string) gin.HandlerFunc {
 		logger := getLogger(c)
 		data, status, err := doRequest(c.Request.Context(), logger, http.MethodGet, javaURL+"/error/flaky", nil, 10)
 		if err != nil {
-			logger.Error("failed to reach java-service for flaky simulation — upstream unreachable", slog.String("target", javaURL+"/error/flaky"), slog.String("error", err.Error()))
+			logger.Error("flow7/flaky: java-service unreachable",
+				slog.String("target", javaURL+"/error/flaky"),
+				slog.String("error", err.Error()),
+			)
 			c.JSON(http.StatusBadGateway, gin.H{"error": "upstream error", "detail": err.Error()})
 			return
 		}
+		if status >= 500 {
+			logger.Error("flow7/flaky: java returned simulated failure — 50% roll failed",
+				slog.Int("upstream_status", status),
+			)
+			setLogFields(c, slog.Int("upstream_status", status), slog.String("outcome", "error"))
+		} else {
+			logger.Info("flow7/flaky: java returned ok — 50% roll passed",
+				slog.Int("upstream_status", status),
+			)
+			setLogFields(c, slog.Int("upstream_status", status), slog.String("outcome", "success"))
+		}
 		c.Data(status, "application/json", data)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Handlers: /api/flow/10/*  – e-commerce checkout simulation
+// ---------------------------------------------------------------------------
+
+// flow10Promo: proxies to Java /promo/verify/:code — DB lookup originates in Java → Postgres
+func flow10PromoHandler(javaURL string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		logger := getLogger(c)
+		code := c.Param("code")
+		target := javaURL + "/promo/verify/" + code
+
+		logger.Info("[flow10/promo] Proxying promo verify to java-service",
+			slog.String("promo_code", code),
+			slog.String("target", target),
+		)
+
+		data, status, err := doRequest(c.Request.Context(), logger, http.MethodGet, target, nil, 10)
+		if err != nil {
+			logger.Error("[flow10/promo] Failed to reach java-service for promo verification — upstream unreachable",
+				slog.String("promo_code", code),
+				slog.String("target", target),
+				slog.String("error", err.Error()),
+			)
+			c.JSON(http.StatusBadGateway, gin.H{"error": "upstream error", "detail": err.Error()})
+			return
+		}
+		var promoResp map[string]interface{}
+		if jsonErr := json.Unmarshal(data, &promoResp); jsonErr == nil {
+			if valid, _ := promoResp["valid"].(bool); valid {
+				logger.Info("[flow10/promo] promo code valid — discount applied",
+					slog.String("promo_code", code),
+					slog.Any("discount_percent", promoResp["discount_percent"]),
+					slog.Int("upstream_status", status),
+				)
+				setLogFields(c,
+					slog.String("promo_code", code),
+					slog.Bool("promo_valid", true),
+					slog.Any("discount_percent", promoResp["discount_percent"]),
+				)
+			} else {
+				logger.Warn("[flow10/promo] promo code invalid or inactive",
+					slog.String("promo_code", code),
+					slog.Int("upstream_status", status),
+				)
+				setLogFields(c,
+					slog.String("promo_code", code),
+					slog.Bool("promo_valid", false),
+				)
+			}
+		}
+		c.Data(status, "application/json", data)
+	}
+}
+
+// flow10Checkout: intentional 500 — payment gateway failure simulation (no downstream call)
+func flow10CheckoutHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		logger := getLogger(c)
+		logger.Error("[flow10/checkout] Intentional 500 — payment gateway unavailable, checkout failure simulation triggered",
+			slog.String("path", "/api/flow/10/checkout"),
+			slog.Int("status", 500),
+			slog.Bool("simulated", true),
+		)
+		setLogFields(c,
+			slog.Bool("simulated", true),
+			slog.String("failure_reason", "payment_gateway_unavailable"),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":     "checkout_failed",
+			"message":   "Payment gateway unavailable — simulated failure",
+			"simulated": true,
+		})
 	}
 }
 
@@ -419,9 +639,37 @@ func errorChaosHandler(expressURL string) gin.HandlerFunc {
 		logger := getLogger(c)
 		data, status, err := doRequest(c.Request.Context(), logger, http.MethodGet, expressURL+"/error/chaos", nil, 10)
 		if err != nil {
-			logger.Error("failed to reach express-service for chaos simulation — upstream unreachable", slog.String("target", expressURL+"/error/chaos"), slog.String("error", err.Error()))
+			logger.Error("flow8/chaos: express-service unreachable",
+				slog.String("target", expressURL+"/error/chaos"),
+				slog.String("error", err.Error()),
+			)
 			c.JSON(http.StatusBadGateway, gin.H{"error": "upstream error", "detail": err.Error()})
 			return
+		}
+		var body map[string]interface{}
+		_ = json.Unmarshal(data, &body)
+		errMsg, _ := body["error"].(string)
+		if errMsg == "" {
+			errMsg, _ = body["message"].(string)
+		}
+		switch {
+		case status >= 500:
+			logger.Error("flow8/chaos: express returned server error",
+				slog.Int("upstream_status", status),
+				slog.String("error_message", errMsg),
+			)
+			setLogFields(c, slog.Int("upstream_status", status), slog.String("error_message", errMsg), slog.String("outcome", "error"))
+		case status >= 400:
+			logger.Warn("flow8/chaos: express returned client error",
+				slog.Int("upstream_status", status),
+				slog.String("error_message", errMsg),
+			)
+			setLogFields(c, slog.Int("upstream_status", status), slog.String("error_message", errMsg), slog.String("outcome", "rate_limited"))
+		default:
+			logger.Info("flow8/chaos: express returned ok",
+				slog.Int("upstream_status", status),
+			)
+			setLogFields(c, slog.Int("upstream_status", status), slog.String("outcome", "success"))
 		}
 		c.Data(status, "application/json", data)
 	}
@@ -433,9 +681,63 @@ func errorSlowFailHandler(expressURL string) gin.HandlerFunc {
 		logger := getLogger(c)
 		data, status, err := doRequest(c.Request.Context(), logger, http.MethodGet, expressURL+"/error/slow-fail", nil, 10)
 		if err != nil {
-			logger.Error("failed to reach express-service for slow-fail simulation — upstream unreachable", slog.String("target", expressURL+"/error/slow-fail"), slog.String("error", err.Error()))
+			logger.Error("flow9/slow-fail: express-service unreachable",
+				slog.String("target", expressURL+"/error/slow-fail"),
+				slog.String("error", err.Error()),
+			)
 			c.JSON(http.StatusBadGateway, gin.H{"error": "upstream error", "detail": err.Error()})
 			return
+		}
+		var sfBody map[string]interface{}
+		_ = json.Unmarshal(data, &sfBody)
+		delayMs := sfBody["delay_ms"]
+		if status >= 500 {
+			logger.Error("flow9/slow-fail: express returned simulated failure — 40% failure rate triggered",
+				slog.Int("upstream_status", status),
+				slog.Any("delay_ms", delayMs),
+			)
+			setLogFields(c, slog.Int("upstream_status", status), slog.Any("delay_ms", delayMs), slog.String("outcome", "error"))
+		} else {
+			logger.Info("flow9/slow-fail: express returned ok — 60% success rate passed",
+				slog.Int("upstream_status", status),
+				slog.Any("delay_ms", delayMs),
+			)
+			setLogFields(c, slog.Int("upstream_status", status), slog.Any("delay_ms", delayMs), slog.String("outcome", "success"))
+		}
+		c.Data(status, "application/json", data)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Handler: GET /api/shop/items  – go → express → mongodb
+// ---------------------------------------------------------------------------
+
+func shopItemsHandler(expressURL string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		logger := getLogger(c)
+		target := expressURL + "/shop/items"
+
+		data, status, err := doRequest(c.Request.Context(), logger, http.MethodGet, target, nil, 10)
+		if err != nil {
+			logger.Error("shop/items: express-service unreachable",
+				slog.String("target", target),
+				slog.String("error", err.Error()),
+			)
+			c.JSON(http.StatusBadGateway, gin.H{"error": "upstream error", "detail": err.Error()})
+			return
+		}
+		if status != http.StatusOK {
+			c.Data(status, "application/json", data)
+			return
+		}
+
+		var items []interface{}
+		if jsonErr := json.Unmarshal(data, &items); jsonErr == nil {
+			logger.Info(fmt.Sprintf("shop/items: fetched %d item(s) from mongodb via express", len(items)),
+				slog.Int("item_count", len(items)),
+				slog.Int("upstream_status", status),
+			)
+			setLogFields(c, slog.Int("item_count", len(items)))
 		}
 		c.Data(status, "application/json", data)
 	}
@@ -456,7 +758,14 @@ func itemsProxyHandler(javaURL string) gin.HandlerFunc {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "upstream error", "detail": err.Error()})
 			return
 		}
-
+		var items []interface{}
+		if jsonErr := json.Unmarshal(data, &items); jsonErr == nil {
+			logger.Info("flow6/items: list fetched from postgres",
+				slog.Int("item_count", len(items)),
+				slog.Int("upstream_status", status),
+			)
+			setLogFields(c, slog.Int("item_count", len(items)))
+		}
 		c.Data(status, "application/json", data)
 	}
 }
@@ -671,6 +980,36 @@ func stressDBHandler(db *sql.DB, logger *slog.Logger) gin.HandlerFunc {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Traffic control handlers — proxy to the Puppeteer traffic service
+// ---------------------------------------------------------------------------
+
+func trafficProxyHandler(trafficURL, path, method string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if trafficURL == "" {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "traffic service not configured"})
+			return
+		}
+
+		client := &http.Client{Timeout: 5 * time.Second}
+		req, err := http.NewRequest(method, trafficURL+path, nil)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "traffic service unavailable"})
+			return
+		}
+		defer resp.Body.Close()
+
+		body, _ := io.ReadAll(resp.Body)
+		c.Data(resp.StatusCode, "application/json", body)
+	}
+}
+
 func stressStatusHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		stress.mu.Lock()
@@ -697,6 +1036,7 @@ func main() {
 	port := getEnv("PORT", "8080")
 	javaURL := getEnv("JAVA_SERVICE_URL", "http://localhost:8081")
 	expressURL := getEnv("EXPRESS_SERVICE_URL", "http://localhost:3001")
+	trafficURL := getEnv("TRAFFIC_SERVICE_URL", "")
 	databaseURL := getEnv("DATABASE_URL", "")
 
 	logger.Info("starting backend service",
@@ -746,12 +1086,16 @@ func main() {
 	{
 		flow := api.Group("/flow")
 		{
-			flow.GET("/1", flow1Handler(javaURL))
+			api.GET("/shop/items", shopItemsHandler(expressURL))
+
+		flow.GET("/1", flow1Handler(javaURL))
 			flow.GET("/2", flow2Handler(javaURL))
 			flow.GET("/3/success", flow3SuccessHandler(expressURL))
 			flow.GET("/3/timeout", flow3TimeoutHandler(expressURL))
 			flow.POST("/4", flow4Handler(javaURL))
 			flow.GET("/cascade", flowCascadeHandler(javaURL, expressURL))
+			flow.GET("/10/promo/:code", flow10PromoHandler(javaURL))
+			flow.POST("/10/checkout", flow10CheckoutHandler())
 		}
 
 		api.GET("/items", itemsProxyHandler(javaURL))
@@ -769,6 +1113,13 @@ func main() {
 			stressGroup.GET("/memory", stressMemoryHandler(logger))
 			stressGroup.GET("/db", stressDBHandler(db, logger))
 			stressGroup.GET("/status", stressStatusHandler())
+		}
+
+		trafficGroup := api.Group("/traffic")
+		{
+			trafficGroup.GET("/status", trafficProxyHandler(trafficURL, "/status", "GET"))
+			trafficGroup.POST("/start", trafficProxyHandler(trafficURL, "/start", "POST"))
+			trafficGroup.POST("/stop", trafficProxyHandler(trafficURL, "/stop", "POST"))
 		}
 	}
 

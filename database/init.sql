@@ -20,3 +20,22 @@ ON CONFLICT DO NOTHING;
 -- Indexes for common access patterns
 CREATE INDEX IF NOT EXISTS idx_items_created_at ON items (created_at);
 CREATE INDEX IF NOT EXISTS idx_items_name       ON items (name);
+
+-- ---------------------------------------------------------------------------
+-- Promo codes (used by Flow 10 — e-commerce checkout simulation)
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS promo_codes (
+    id               SERIAL PRIMARY KEY,
+    code             VARCHAR(50) UNIQUE NOT NULL,
+    discount_percent INT                NOT NULL,
+    is_active        BOOLEAN            NOT NULL DEFAULT true
+);
+
+-- Seed promo codes (idempotent — skipped on conflict)
+INSERT INTO promo_codes (code, discount_percent, is_active) VALUES
+    ('10OFF', 10, true),
+    ('15OFF', 15, true),
+    ('20OFF', 20, true),
+    ('50OFF', 50, true)
+ON CONFLICT DO NOTHING;

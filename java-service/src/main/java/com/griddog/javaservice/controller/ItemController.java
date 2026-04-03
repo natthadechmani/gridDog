@@ -33,11 +33,13 @@ public class ItemController {
     @GetMapping("/error/flaky")
     public ResponseEntity<Map<String, Object>> errorFlaky() {
         long start = System.currentTimeMillis();
+        log.info("GET /error/flaky",
+                StructuredArguments.kv("path", "/error/flaky"));
         boolean fail = ThreadLocalRandom.current().nextBoolean();
 
         long duration = System.currentTimeMillis() - start;
         if (fail) {
-            log.error("Flaky endpoint returning 500 — 50% failure rate triggered on this roll",
+            log.error("GET /error/flaky — 500 simulated flaky failure (50% roll failed)",
                     StructuredArguments.kv("path", "/error/flaky"),
                     StructuredArguments.kv("status", 500),
                     StructuredArguments.kv("duration_ms", duration));
@@ -45,7 +47,7 @@ public class ItemController {
                     .body(Map.of("error", "simulated flaky failure", "simulated", true));
         }
 
-        log.info("Flaky endpoint returning 200 — 50% success rate passed on this roll",
+        log.info("GET /error/flaky — 200 ok (50% roll passed)",
                 StructuredArguments.kv("path", "/error/flaky"),
                 StructuredArguments.kv("status", 200),
                 StructuredArguments.kv("duration_ms", duration));
@@ -55,7 +57,7 @@ public class ItemController {
     @GetMapping("/health")
     public ResponseEntity<Map<String, String>> health() {
         long start = System.currentTimeMillis();
-        log.info("Request received",
+        log.info("GET /health",
                 StructuredArguments.kv("method", "GET"),
                 StructuredArguments.kv("path", "/health"));
 
@@ -65,8 +67,7 @@ public class ItemController {
         );
 
         long duration = System.currentTimeMillis() - start;
-        log.info("Request completed",
-                StructuredArguments.kv("method", "GET"),
+        log.info("GET /health — 200 ok",
                 StructuredArguments.kv("path", "/health"),
                 StructuredArguments.kv("status", 200),
                 StructuredArguments.kv("duration_ms", duration));
@@ -77,7 +78,7 @@ public class ItemController {
     @GetMapping("/items")
     public ResponseEntity<List<Item>> getAllItems() {
         long start = System.currentTimeMillis();
-        log.info("Request received",
+        log.info("GET /items",
                 StructuredArguments.kv("method", "GET"),
                 StructuredArguments.kv("path", "/items"));
 
@@ -85,8 +86,7 @@ public class ItemController {
             List<Item> items = itemRepository.findAll();
 
             long duration = System.currentTimeMillis() - start;
-            log.info("Fetched all items",
-                    StructuredArguments.kv("method", "GET"),
+            log.info("GET /items — fetched " + items.size() + " item(s) from postgres",
                     StructuredArguments.kv("path", "/items"),
                     StructuredArguments.kv("status", 200),
                     StructuredArguments.kv("item_count", items.size()),
@@ -95,8 +95,7 @@ public class ItemController {
             return ResponseEntity.ok(items);
         } catch (Exception ex) {
             long duration = System.currentTimeMillis() - start;
-            log.error("Unexpected error fetching items",
-                    StructuredArguments.kv("method", "GET"),
+            log.error("GET /items — 500 unexpected error querying postgres",
                     StructuredArguments.kv("path", "/items"),
                     StructuredArguments.kv("status", 500),
                     StructuredArguments.kv("duration_ms", duration),
@@ -108,7 +107,7 @@ public class ItemController {
     @GetMapping("/items/{id}")
     public ResponseEntity<Object> getItemById(@PathVariable Long id) {
         long start = System.currentTimeMillis();
-        log.info("Request received",
+        log.info("GET /items/" + id,
                 StructuredArguments.kv("method", "GET"),
                 StructuredArguments.kv("path", "/items/" + id),
                 StructuredArguments.kv("item_id", id));
@@ -118,8 +117,7 @@ public class ItemController {
 
             if (found.isEmpty()) {
                 long duration = System.currentTimeMillis() - start;
-                log.warn("Item not found",
-                        StructuredArguments.kv("method", "GET"),
+                log.warn("GET /items/" + id + " — 404 item not found in postgres",
                         StructuredArguments.kv("path", "/items/" + id),
                         StructuredArguments.kv("status", 404),
                         StructuredArguments.kv("item_id", id),
@@ -133,20 +131,21 @@ public class ItemController {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorBody);
             }
 
+            Item item = found.get();
             long duration = System.currentTimeMillis() - start;
-            log.info("Fetched item by id",
-                    StructuredArguments.kv("method", "GET"),
+            log.info("GET /items/" + id + " — fetched item id=" + item.getId() + " name=" + item.getName() + " value=" + item.getValue(),
                     StructuredArguments.kv("path", "/items/" + id),
                     StructuredArguments.kv("status", 200),
-                    StructuredArguments.kv("item_id", id),
+                    StructuredArguments.kv("item_id", item.getId()),
+                    StructuredArguments.kv("item_name", item.getName()),
+                    StructuredArguments.kv("item_value", item.getValue()),
                     StructuredArguments.kv("duration_ms", duration));
 
-            return ResponseEntity.ok(found.get());
+            return ResponseEntity.ok(item);
 
         } catch (Exception ex) {
             long duration = System.currentTimeMillis() - start;
-            log.error("Unexpected error fetching item",
-                    StructuredArguments.kv("method", "GET"),
+            log.error("GET /items/" + id + " — 500 unexpected error querying postgres",
                     StructuredArguments.kv("path", "/items/" + id),
                     StructuredArguments.kv("status", 500),
                     StructuredArguments.kv("item_id", id),
@@ -164,7 +163,7 @@ public class ItemController {
     @PostMapping("/items")
     public ResponseEntity<Item> createItem() {
         long start = System.currentTimeMillis();
-        log.info("Request received",
+        log.info("POST /items",
                 StructuredArguments.kv("method", "POST"),
                 StructuredArguments.kv("path", "/items"));
 
@@ -182,8 +181,7 @@ public class ItemController {
             Item saved = itemRepository.save(item);
 
             long duration = System.currentTimeMillis() - start;
-            log.info("Created new item",
-                    StructuredArguments.kv("method", "POST"),
+            log.info("POST /items — created item id=" + saved.getId() + " name=" + saved.getName() + " value=" + saved.getValue(),
                     StructuredArguments.kv("path", "/items"),
                     StructuredArguments.kv("status", 201),
                     StructuredArguments.kv("item_id", saved.getId()),
@@ -195,8 +193,7 @@ public class ItemController {
 
         } catch (Exception ex) {
             long duration = System.currentTimeMillis() - start;
-            log.error("Unexpected error creating item",
-                    StructuredArguments.kv("method", "POST"),
+            log.error("POST /items — 500 unexpected error inserting into postgres",
                     StructuredArguments.kv("path", "/items"),
                     StructuredArguments.kv("status", 500),
                     StructuredArguments.kv("duration_ms", duration),

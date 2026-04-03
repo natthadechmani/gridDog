@@ -7,14 +7,17 @@ locally and in AWS regional deployments.
 
 ## Project Services
 
-| Service          | Image                       | Internal Port | Public Port |
-|------------------|-----------------------------|---------------|-------------|
-| nginx            | nginx:alpine                | 80            | **80**      |
-| frontend         | griddog/frontend            | 3000          | —           |
-| backend          | griddog/backend             | 8080          | —           |
-| java-service     | griddog/java-service        | 8081          | 8081        |
-| express-service  | griddog/express-service     | 3001          | 3001        |
-| postgres         | postgres:15                 | 5432          | 5432        |
+| Service          | Image                       | Internal Port | Public Port | Profile       |
+|------------------|-----------------------------|---------------|-------------|---------------|
+| nginx            | nginx:alpine                | 80            | **80**      | default       |
+| frontend         | griddog/frontend            | 3000          | —           | default       |
+| backend          | griddog/backend             | 8080          | —           | default       |
+| java-service     | griddog/java-service        | 8081          | 8081        | default       |
+| express-service  | griddog/express-service     | 3001          | 3001        | default       |
+| postgres         | postgres:15                 | 5432          | 5432        | default       |
+| mongodb          | mongo:7                     | 27017         | 27017       | default       |
+| traffic          | griddog/traffic             | —             | —           | traffic       |
+| datadog-agent    | registry.datadoghq.com/agent| —             | —           | observability |
 
 nginx is the single entry point on port 80. The frontend is not exposed directly.
 
@@ -73,7 +76,24 @@ Uses the base compose file only. Images are tagged `latest`.
 
 ```bash
 # From this directory (deploy/docker)
-docker compose up --build
+
+# Default stack (no traffic generator, no Datadog agent)
+docker compose --profile default up --build
+
+# Default stack + Datadog agent
+docker compose --profile default --profile observability up --build
+
+# Default stack + traffic generator (Puppeteer)
+docker compose --profile default --profile traffic up --build
+
+# Start traffic generator against an already-running stack
+docker compose --profile traffic up traffic --build
+
+# Tear down (volumes preserved)
+docker compose --profile default down
+
+# Tear down and reset Postgres data volume
+docker compose --profile default down -v
 ```
 
 To view logs for all services:
@@ -172,19 +192,22 @@ nginx listens on port 80 and routes traffic as follows:
 Healthchecks drive the startup dependency chain. Services will not start until
 their dependencies report healthy.
 
-| Service         | Endpoint checked                        | Method        | Interval |
-|-----------------|-----------------------------------------|---------------|----------|
-| postgres        | `pg_isready -U griddog -d griddog`      | pg_isready    | 5m       |
-| backend         | `GET /health`                           | wget          | 5m       |
-| java-service    | `GET /actuator/health`                  | wget          | 5m       |
-| express-service | `GET /health`                           | wget          | 5m       |
-| frontend        | `GET /` (HTTP 200)                      | node http.get | 5m       |
+| Service         | Endpoint checked                            | Method        | Interval |
+|-----------------|---------------------------------------------|---------------|----------|
+| postgres        | `pg_isready -U griddog -d griddog`          | pg_isready    | 5m       |
+| mongodb         | `mongosh --eval "db.adminCommand('ping')"` | mongosh       | 5m       |
+| backend         | `GET /health`                               | wget          | 5m       |
+| java-service    | `GET /actuator/health`                      | wget          | 5m       |
+| express-service | `GET /health`                               | wget          | 5m       |
+| frontend        | `GET /` (HTTP 200)                          | node http.get | 5m       |
+| nginx           | `GET /health`                               | wget          | 5m       |
 
 **Startup order:**
 ```
-postgres healthy → backend + java-service + express-service start
-backend healthy  → frontend starts
-frontend healthy → nginx starts (port 80 opens)
+postgres + mongodb healthy → backend + java-service + express-service start
+backend healthy            → frontend starts
+frontend healthy           → nginx starts (port 80 opens)
+nginx healthy              → traffic generator starts (profile: traffic only)
 ```
 
 > The frontend healthcheck uses `node` instead of `wget` because the runner
@@ -325,6 +348,97 @@ Browser → nginx :80
 > backend only proxies the response through, so a trace will show exactly which
 > service introduced the failure.
 
+### Flow 10 — E-Commerce Shop *(full multi-page distributed trace)*
+
+Flow 10 is a full user journey across three separate frontend pages, spanning four hops before the intentional 500:
+
+```
+Browser → /shop       (items fetched from MongoDB; add to cart, stored in localStorage)
+        → /cart       (review cart, proceed to checkout)
+        → /checkout   (apply promo code + place order)
+```
+
+#### Shop items fetch
+`GET /api/shop/items`
+```
+Browser → nginx :80
+       → Go backend :8080  GET /api/shop/items
+       → Express service :3001  GET /shop/items
+       → MongoDB :27017  db.shop_items.find()  (seeded on first start)
+       ← Express 200  [ 6 items ]
+       ← Go proxies to client
+```
+
+#### Promo code verification
+`GET /api/flow/10/promo/:code`
+```
+Browser → nginx :80
+       → Go backend :8080  GET /api/flow/10/promo/:code
+       → Java service :8081  GET /promo/verify/:code
+       → Postgres  SELECT * FROM promo_codes WHERE code=:code
+       ← Java 200  { valid: true, code, discount_percent }  or  { valid: false }
+       ← Go proxies to client
+```
+
+**Available promo codes:** `10OFF` (10%), `15OFF` (15%), `20OFF` (20%), `50OFF` (50%)
+
+#### Checkout (intentional failure)
+`POST /api/flow/10/checkout`
+```
+Browser → nginx :80
+       → Go backend :8080  POST /api/flow/10/checkout
+       ← Go returns 500 immediately (payment gateway simulated failure)
+```
+The cart is cleared in the browser after the order attempt. This 500 is intentional — it ensures the full distributed trace (nginx → Go → Java → Postgres) is always captured.
+
+---
+
+## Traffic Generator (Puppeteer)
+
+A headless-Chrome Docker service that continuously simulates realistic browser traffic against the running stack. It is **off by default** and activated via the `traffic` compose profile.
+
+### Source
+```
+traffic/
+  Dockerfile    ← ghcr.io/puppeteer/puppeteer:22 base image (Chrome pre-installed)
+  package.json  ← puppeteer-core dependency
+  traffic.js    ← main script
+```
+
+### Behaviour
+
+Each loop iteration picks a random flow (1–10) and simulates a user interaction:
+
+- **Flows 1–9** — visits the dashboard and clicks the Send button for the chosen flow
+- **Flow 10** — randomly picks one of three user journeys:
+
+| Journey | Weight | Description |
+|---------|--------|-------------|
+| A — Full checkout | 40% | Shop → add items → cart → checkout → apply `10OFF` → Place Order → 500 |
+| B — Cart abandonment | 30% | Shop → add items → cart → leave without checking out |
+| C — Bad promo + abandon | 30% | Shop → add items → cart → checkout → apply `100OFF` → invalid banner → leave |
+
+Loop delay between runs: 800–3000ms (random).
+
+### Environment variables
+
+| Variable           | Default          | Description                  |
+|--------------------|------------------|------------------------------|
+| `TRAFFIC_BASE_URL` | `http://nginx`   | Base URL for all page visits |
+
+### Starting / stopping
+
+```bash
+# Start with the default stack
+docker compose --profile default --profile traffic up --build
+
+# Start traffic against an already-running stack
+docker compose --profile traffic up traffic --build
+
+# Stop just the traffic generator
+docker compose --profile traffic stop traffic
+```
+
 ---
 
 ## Resource Limits
@@ -354,4 +468,8 @@ used as hostnames for inter-service communication (e.g. `http://java-service:808
 | Volume          | Mounted in                          | Purpose              |
 |-----------------|-------------------------------------|----------------------|
 | `postgres_data` | `/var/lib/postgresql/data`          | Persistent DB data   |
+| `mongodb_data`  | `/data/db` (mongodb)                | Persistent shop_items data |
 | `./../../database/init.sql` | `/docker-entrypoint-initdb.d/init.sql` | DB initialisation script |
+
+> Running `docker compose down -v` removes **both** `postgres_data` and `mongodb_data`.
+> On next start the shop_items collection is re-seeded automatically by express-service.
