@@ -21,6 +21,12 @@
         - /data/mongodb
         - /opt/griddog-compose
 
+    - name: Create postgres log directory
+      ansible.builtin.file:
+        path: /var/log/postgresql
+        state: directory
+        mode: "0777"
+
     - name: Template docker-compose file
       ansible.builtin.template:
         src: ../templates/docker-compose.databases.yml.j2

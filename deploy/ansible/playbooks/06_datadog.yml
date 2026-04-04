@@ -27,3 +27,4 @@
         project_src: /opt/griddog-datadog
         state: present
         pull: always
+        recreate: always

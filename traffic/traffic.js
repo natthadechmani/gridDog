@@ -118,7 +118,7 @@ async function runDashboardFlow(page, flowNum) {
   await enableRequestRedirect(page)
 
   console.log(`[flow-${flowNum}] visiting dashboard`)
-  await page.goto(`${BASE_URL}/`, { waitUntil: 'networkidle2', timeout: 30000 })
+  await page.goto(`${BASE_URL}/`, { waitUntil: 'load', timeout: 30000 })
 
   const buttons = await page.$$('button')
   const sendButtons = []
@@ -175,13 +175,13 @@ async function funnelJourneyA(page, workerId) {
   console.log(JSON.stringify({ event: 'journey_start', journey: tag, promo_plan: promoCode }))
 
   // — Shop: add 1-3 items
-  await page.goto(`${BASE_URL}/shop`, { waitUntil: 'networkidle2', timeout: 30000 })
+  await page.goto(`${BASE_URL}/shop`, { waitUntil: 'load', timeout: 30000 })
   await sleep(500, 1200)
   const itemCount = Math.floor(Math.random() * 3) + 1
   await addItemsAndReadCart(page, itemCount, tag)
 
   // — Cart: review
-  await page.goto(`${BASE_URL}/cart`, { waitUntil: 'networkidle2', timeout: 30000 })
+  await page.goto(`${BASE_URL}/cart`, { waitUntil: 'load', timeout: 30000 })
   await sleep(500, 1000)
   const cartAtView = await readCart(page)
   console.log(JSON.stringify({
@@ -196,9 +196,9 @@ async function funnelJourneyA(page, workerId) {
   const checkoutLink = await page.$('a[href="/checkout"]')
   if (checkoutLink) {
     await checkoutLink.click()
-    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => {})
+    await page.waitForNavigation({ waitUntil: 'load', timeout: 15000 }).catch(() => {})
   } else {
-    await page.goto(`${BASE_URL}/checkout`, { waitUntil: 'networkidle2', timeout: 30000 })
+    await page.goto(`${BASE_URL}/checkout`, { waitUntil: 'load', timeout: 30000 })
   }
   await sleep(500, 1000)
 
@@ -276,14 +276,14 @@ async function funnelJourneyB(page, workerId) {
   const tag = `funnel-${workerId}/B`
   console.log(JSON.stringify({ event: 'journey_start', journey: tag }))
 
-  await page.goto(`${BASE_URL}/shop`, { waitUntil: 'networkidle2', timeout: 30000 })
+  await page.goto(`${BASE_URL}/shop`, { waitUntil: 'load', timeout: 30000 })
   await sleep(500, 1200)
 
   const itemCount = Math.floor(Math.random() * 2) + 1
   await addItemsAndReadCart(page, itemCount, tag)
 
   // View cart, then abandon
-  await page.goto(`${BASE_URL}/cart`, { waitUntil: 'networkidle2', timeout: 30000 })
+  await page.goto(`${BASE_URL}/cart`, { waitUntil: 'load', timeout: 30000 })
   await sleep(1500, 3000)
 
   const cartAtView = await readCart(page)
@@ -297,7 +297,7 @@ async function funnelJourneyB(page, workerId) {
     reason:      'user_left_cart_page',
   }))
 
-  await page.goto(`${BASE_URL}/shop`, { waitUntil: 'networkidle2', timeout: 30000 })
+  await page.goto(`${BASE_URL}/shop`, { waitUntil: 'load', timeout: 30000 })
 }
 
 // ---------------------------------------------------------------------------
@@ -308,21 +308,21 @@ async function funnelJourneyC(page, workerId) {
   const badPromo = pickRandom(INVALID_PROMOS)
   console.log(JSON.stringify({ event: 'journey_start', journey: tag, promo_plan: badPromo }))
 
-  await page.goto(`${BASE_URL}/shop`, { waitUntil: 'networkidle2', timeout: 30000 })
+  await page.goto(`${BASE_URL}/shop`, { waitUntil: 'load', timeout: 30000 })
   await sleep(500, 1200)
 
   const itemCount = Math.floor(Math.random() * 3) + 1
   await addItemsAndReadCart(page, itemCount, tag)
 
-  await page.goto(`${BASE_URL}/cart`, { waitUntil: 'networkidle2', timeout: 30000 })
+  await page.goto(`${BASE_URL}/cart`, { waitUntil: 'load', timeout: 30000 })
   await sleep(500, 1000)
 
   const checkoutLink = await page.$('a[href="/checkout"]')
   if (checkoutLink) {
     await checkoutLink.click()
-    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => {})
+    await page.waitForNavigation({ waitUntil: 'load', timeout: 15000 }).catch(() => {})
   } else {
-    await page.goto(`${BASE_URL}/checkout`, { waitUntil: 'networkidle2', timeout: 30000 })
+    await page.goto(`${BASE_URL}/checkout`, { waitUntil: 'load', timeout: 30000 })
   }
   await sleep(500, 1000)
 
@@ -376,7 +376,7 @@ async function funnelJourneyC(page, workerId) {
     reason:           'promo_rejected_user_left',
   }))
 
-  await page.goto(`${BASE_URL}/shop`, { waitUntil: 'networkidle2', timeout: 30000 })
+  await page.goto(`${BASE_URL}/shop`, { waitUntil: 'load', timeout: 30000 })
 }
 
 // ---------------------------------------------------------------------------
@@ -387,21 +387,21 @@ async function funnelJourneyD(page, workerId) {
   const tag = `funnel-${workerId}/D`
   console.log(JSON.stringify({ event: 'journey_start', journey: tag, promo_used: false }))
 
-  await page.goto(`${BASE_URL}/shop`, { waitUntil: 'networkidle2', timeout: 30000 })
+  await page.goto(`${BASE_URL}/shop`, { waitUntil: 'load', timeout: 30000 })
   await sleep(500, 1200)
 
   const itemCount = Math.floor(Math.random() * 3) + 1
   await addItemsAndReadCart(page, itemCount, tag)
 
-  await page.goto(`${BASE_URL}/cart`, { waitUntil: 'networkidle2', timeout: 30000 })
+  await page.goto(`${BASE_URL}/cart`, { waitUntil: 'load', timeout: 30000 })
   await sleep(500, 800)
 
   const checkoutLink = await page.$('a[href="/checkout"]')
   if (checkoutLink) {
     await checkoutLink.click()
-    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => {})
+    await page.waitForNavigation({ waitUntil: 'load', timeout: 15000 }).catch(() => {})
   } else {
-    await page.goto(`${BASE_URL}/checkout`, { waitUntil: 'networkidle2', timeout: 30000 })
+    await page.goto(`${BASE_URL}/checkout`, { waitUntil: 'load', timeout: 30000 })
   }
   await sleep(500, 1000)
 

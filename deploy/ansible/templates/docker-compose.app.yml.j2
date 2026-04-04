@@ -17,6 +17,9 @@ services:
       DATABASE_URL: "jdbc:postgresql://{{ databases_private_ip }}:5432/griddog"
       DB_USER: griddog
       DB_PASSWORD: "{{ db_password }}"
+    labels:
+      my.custom.label.team: 'java-backend-team'
+      com.datadoghq.ad.logs: '[{"source": "java"}]'
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health || exit 1"]
       interval: 30s
@@ -35,6 +38,9 @@ services:
     environment:
       PORT: "3001"
       MONGODB_URI: "mongodb://{{ databases_private_ip }}:27017/griddog"
+    labels:
+      my.custom.label.team: 'express-team'
+      com.datadoghq.ad.logs: '[{"source": "nodejs"}]'
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
       interval: 30s
@@ -58,6 +64,9 @@ services:
       EXPRESS_SERVICE_URL: "http://express-service:3001"
       TRAFFIC_SERVICE_URL: "http://{{ frontend_private_ip }}:3002"
       DATABASE_URL: "postgres://griddog:{{ db_password }}@{{ databases_private_ip }}:5432/griddog?sslmode=disable"
+    labels:
+      my.custom.label.team: 'golang-backend-team'
+      com.datadoghq.ad.logs: '[{"source": "go"}]'
     depends_on:
       java-service:
         condition: service_healthy

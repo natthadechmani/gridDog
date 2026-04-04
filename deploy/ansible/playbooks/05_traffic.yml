@@ -28,6 +28,11 @@
         cmd: docker compose -f /opt/griddog-traffic/docker-compose.yml down --remove-orphans
       ignore_errors: true
 
+    - name: Force remove stale container if still present
+      ansible.builtin.command:
+        cmd: docker rm -f griddog-traffic
+      ignore_errors: true
+
     - name: Build and start traffic container
       community.docker.docker_compose_v2:
         project_src: /opt/griddog-traffic

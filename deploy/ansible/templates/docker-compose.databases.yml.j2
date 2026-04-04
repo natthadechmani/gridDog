@@ -4,6 +4,17 @@ services:
     image: postgres:15
     container_name: griddog-postgres
     restart: unless-stopped
+    command: >
+      postgres
+      -c logging_collector=on
+      -c log_directory=/var/log/postgresql
+      -c log_filename=postgresql-%Y-%m-%d.log
+      -c log_rotation_age=1440
+      -c log_rotation_size=102400
+      -c log_truncate_on_rotation=off
+      -c log_statement=all
+      -c log_line_prefix='%m [%p] %d %a %u %h %c '
+      -c log_file_mode=0644
     environment:
       POSTGRES_DB: griddog
       POSTGRES_USER: griddog
@@ -12,7 +23,13 @@ services:
       - "5432:5432"
     volumes:
       - /data/postgres:/var/lib/postgresql/data
+      - /var/log/postgresql:/var/log/postgresql
       - {{ repo_dir }}/database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    labels:
+      com.datadoghq.ad.check_names: '["postgres"]'
+      com.datadoghq.ad.init_configs: '[{}]'
+      com.datadoghq.ad.instances: '[{"host":"%%host%%", "port":5432,"username":"datadog","password":"{{ dd_postgres_password }}"}]'
+      com.datadoghq.ad.logs: '[{"service":"griddog-postgresql","source":"postgresql","type":"file","path":"/var/log/postgresql/postgresql-*.log"}]'
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U griddog -d griddog"]
       interval: 30s

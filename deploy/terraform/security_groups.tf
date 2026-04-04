@@ -61,6 +61,16 @@ resource "aws_security_group_rule" "alb_ingress_frontend" {
   description              = "Puppeteer synthetic traffic from frontend EC2"
 }
 
+resource "aws_security_group_rule" "alb_ingress_nat" {
+  security_group_id = aws_security_group.alb.id
+  type              = "ingress"
+  from_port         = 80
+  to_port           = 80
+  protocol          = "tcp"
+  cidr_blocks       = ["${aws_eip.nat.public_ip}/32"]
+  description       = "HTTP from NAT gateway EIP (Puppeteer via private subnet)"
+}
+
 resource "aws_security_group_rule" "alb_egress_nginx" {
   security_group_id        = aws_security_group.alb.id
   type                     = "egress"

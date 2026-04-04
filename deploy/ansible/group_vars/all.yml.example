@@ -23,3 +23,4 @@ alb_dns: "griddog-alb-xxxx.ap-southeast-1.elb.amazonaws.com"
 # Datadog
 dd_api_key: "your-datadog-api-key"
 dd_env: "qa"
+dd_postgres_password: "your-datadog-postgres-password"
