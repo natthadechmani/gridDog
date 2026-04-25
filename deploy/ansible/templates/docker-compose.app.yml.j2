@@ -78,6 +78,7 @@ services:
       DD_SERVICE: "go-backend-vm"
       DD_VERSION: "1.0.1"
       DD_ENV: "{{ dd_env }}"
+      DOTNET_SCHEDULER_URL: "http://dotnet-scheduler:5000"
       DD_AGENT_HOST: datadog-agent
       DD_LOGS_INJECTION: "true"
       DD_RUNTIME_METRICS_ENABLED: "true"
@@ -98,9 +99,37 @@ services:
         condition: service_healthy
       express-service:
         condition: service_healthy
+      dotnet-scheduler:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 15s
+
+  dotnet-scheduler:
+    build:
+      context: {{ repo_dir }}/dotnet-scheduler
+      dockerfile: Dockerfile
+    container_name: griddog-dotnet-scheduler
+    restart: unless-stopped
+    networks:
+      - griddog-network
+    environment:
+      PORT: "5000"
+      DATABASE_URL: "Host={{ databases_private_ip }};Port=5432;Database=griddog;Username=griddog;Password={{ db_password }}"
+    labels:
+      my.custom.label.team: 'dotnet-team'
+      com.datadoghq.ad.logs: '[{"source": "dotnet"}]'
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

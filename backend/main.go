@@ -70,6 +70,7 @@ var routeLabel = map[string]string{
 	"GET /api/flow/3/success":       "flow3/success: express — fibonacci compute",
 	"GET /api/flow/3/timeout":       "flow3/timeout: express — intentional 15s delay",
 	"POST /api/flow/4":              "flow4: java → postgres — INSERT new item",
+	"POST /api/flow/4a":             "flow4a: dotnet-scheduler → postgres — DELETE items where id != 1",
 	"GET /api/flow/cascade":         "flow/cascade: java GET /items/1 → express GET /compute",
 	"GET /api/flow/10/promo/:code":  "flow10/promo: java → postgres — promo code lookup",
 	"POST /api/flow/10/checkout":    "flow10/checkout: intentional 500 — payment gateway failure",
@@ -709,6 +710,45 @@ func errorSlowFailHandler(expressURL string) gin.HandlerFunc {
 }
 
 // ---------------------------------------------------------------------------
+// Handler: POST /api/flow/4a  – dotnet-scheduler → postgres DELETE
+// ---------------------------------------------------------------------------
+
+func flow4aHandler(dotnetURL string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		logger := getLogger(c)
+		if dotnetURL == "" {
+			logger.Error("flow4a: DOTNET_SCHEDULER_URL not configured")
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "dotnet-scheduler not configured"})
+			return
+		}
+		target := dotnetURL + "/cleanup"
+
+		data, status, err := doRequest(c.Request.Context(), logger, http.MethodPost, target, nil, 10)
+		if err != nil {
+			logger.Error("flow4a: dotnet-scheduler unreachable",
+				slog.String("target", target),
+				slog.String("error", err.Error()),
+			)
+			c.JSON(http.StatusBadGateway, gin.H{"error": "upstream error", "detail": err.Error()})
+			return
+		}
+
+		var result map[string]interface{}
+		if jsonErr := json.Unmarshal(data, &result); jsonErr != nil {
+			c.Data(status, "application/json", data)
+			return
+		}
+		deleted := result["deleted"]
+		logger.Info("flow4a: cleanup complete — rows deleted from items",
+			slog.Any("deleted", deleted),
+			slog.Int("upstream_status", status),
+		)
+		setLogFields(c, slog.Any("deleted", deleted))
+		c.JSON(status, result)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Handler: GET /api/shop/items  – go → express → mongodb
 // ---------------------------------------------------------------------------
 
@@ -1037,6 +1077,7 @@ func main() {
 	javaURL := getEnv("JAVA_SERVICE_URL", "http://localhost:8081")
 	expressURL := getEnv("EXPRESS_SERVICE_URL", "http://localhost:3001")
 	trafficURL := getEnv("TRAFFIC_SERVICE_URL", "")
+	dotnetURL := getEnv("DOTNET_SCHEDULER_URL", "")
 	databaseURL := getEnv("DATABASE_URL", "")
 
 	logger.Info("starting backend service",
@@ -1093,6 +1134,7 @@ func main() {
 			flow.GET("/3/success", flow3SuccessHandler(expressURL))
 			flow.GET("/3/timeout", flow3TimeoutHandler(expressURL))
 			flow.POST("/4", flow4Handler(javaURL))
+			flow.POST("/4a", flow4aHandler(dotnetURL))
 			flow.GET("/cascade", flowCascadeHandler(javaURL, expressURL))
 			flow.GET("/10/promo/:code", flow10PromoHandler(javaURL))
 			flow.POST("/10/checkout", flow10CheckoutHandler())

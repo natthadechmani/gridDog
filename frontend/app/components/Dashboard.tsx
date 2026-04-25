@@ -833,6 +833,7 @@ type FlowKey =
   | 'flow3s'
   | 'flow3t'
   | 'flow4'
+  | 'flow4a'
   | 'cascade'
   | 'items'
   | 'errorFlaky'
@@ -877,6 +878,12 @@ const FLOW_DEFINITIONS: Record<FlowKey, FlowDefinition> = {
     description: 'nginx → Go backend (generates random payload) → Java POST /items → Postgres INSERT → Java 201 Created → Go returns new entity.',
     method: 'POST',
     endpoint: `${BACKEND_URL}/api/flow/4`,
+  },
+  flow4a: {
+    title: 'Flow 4a — DB Cleanup',
+    description: 'nginx → Go backend → dotnet-scheduler POST /cleanup → DELETE FROM items WHERE id != 1 → returns deleted count.',
+    method: 'POST',
+    endpoint: `${BACKEND_URL}/api/flow/4a`,
   },
   cascade: {
     title: 'Flow 5 — Cascade Failure',

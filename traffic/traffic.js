@@ -112,6 +112,46 @@ async function enableRequestRedirect(page) {
 }
 
 // ---------------------------------------------------------------------------
+// Flow 4a: navigate to dashboard and click the flow4a Send button
+// ---------------------------------------------------------------------------
+async function runFlow4a(browser) {
+  if (!isRunning) return
+  console.log('[flow-4a] triggering db cleanup')
+  const page = await browser.newPage()
+  page.setDefaultNavigationTimeout(30000)
+  try {
+    await enableRequestRedirect(page)
+    await page.goto(`${BASE_URL}/`, { waitUntil: 'load', timeout: 30000 })
+
+    const clicked = await page.evaluate(() => {
+      for (const el of document.querySelectorAll('h2, h3, p, span, div')) {
+        if (el.childElementCount === 0 && el.textContent?.includes('Flow 4a')) {
+          let node = el.parentElement
+          for (let i = 0; i < 6; i++) {
+            if (!node) break
+            const btn = [...node.querySelectorAll('button')].find(b => b.textContent?.trim() === 'Send')
+            if (btn) { btn.click(); return true }
+            node = node.parentElement
+          }
+        }
+      }
+      return false
+    })
+
+    if (clicked) {
+      await sleep(2000, 3000)
+      console.log('[flow-4a] cleanup complete')
+    } else {
+      console.log('[flow-4a] could not find flow4a Send button, skipping')
+    }
+  } catch (err) {
+    console.error(`[flow-4a] error: ${err.message}`)
+  } finally {
+    await page.close().catch(() => {})
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Dashboard flow (flows 1-9): visit dashboard and click the Nth Send button
 // ---------------------------------------------------------------------------
 async function runDashboardFlow(page, flowNum) {
@@ -502,6 +542,15 @@ async function main() {
       console.error(`[funnel-${i}] fatal: ${err.message}`)
     )
   }
+
+  // Flow 4a: trigger db cleanup every 3 minutes
+  setInterval(async () => {
+    try {
+      await runFlow4a(browser)
+    } catch (err) {
+      console.error(`[flow-4a] fatal: ${err.message}`)
+    }
+  }, 3 * 60 * 1000)
 
   // Main loop: dashboard flows 1-9
   while (true) {
