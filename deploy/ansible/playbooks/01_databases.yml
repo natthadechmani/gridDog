@@ -55,3 +55,28 @@
       retries: 15
       delay: 5
       until: mongo_ready.rc == 0
+
+    - name: Create datadog PostgreSQL user
+      ansible.builtin.command:
+        cmd: >
+          docker exec griddog-postgres psql -U griddog -d griddog -c
+          "DO $$ BEGIN
+            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'datadog') THEN
+              CREATE USER datadog WITH PASSWORD '{{ dd_postgres_password }}';
+            END IF;
+          END $$;
+          GRANT pg_monitor TO datadog;
+          GRANT SELECT ON pg_stat_database TO datadog;"
+      changed_when: false
+
+    - name: Create datadog MongoDB user
+      ansible.builtin.command:
+        cmd: >
+          docker exec griddog-mongodb mongosh admin --eval
+          "try { db.createUser({ user: 'datadog', pwd: '{{ dd_mongo_password }}', roles: [
+            { role: 'read', db: 'admin' },
+            { role: 'clusterMonitor', db: 'admin' },
+            { role: 'read', db: 'local' },
+            { role: 'readAnyDatabase', db: 'admin' }
+          ] }) } catch(e) { if (e.code !== 51003) throw e }"
+      changed_when: false
