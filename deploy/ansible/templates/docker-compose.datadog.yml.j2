@@ -15,6 +15,8 @@ services:
       - DD_CONTAINER_LABELS_AS_TAGS={"my.custom.label.team":"team"}
       - DD_CONTAINER_EXCLUDE_LOGS=name:griddog-datadog
       - DD_TAGS=group:griddog
+      - DD_APM_ENABLED=true
+      - DD_APM_NON_LOCAL_TRAFFIC=true
 {% if inventory_hostname in groups['databases'] %}
       - DD_LOGS_CONFIG_AUTO_MULTI_LINE_ENABLE_DATETIME_DETECTION=true
       - DD_LOGS_CONFIG_AUTO_MULTI_LINE_ENABLE_JSON_DETECTION=true
