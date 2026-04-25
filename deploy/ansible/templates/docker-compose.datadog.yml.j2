@@ -4,7 +4,16 @@ services:
     image: registry.datadoghq.com/agent:latest
     container_name: griddog-datadog
     restart: unless-stopped
+    pid: host
+{% if inventory_hostname in groups['app'] %}
+    networks:
+      - griddog-network
+    ports:
+      - "8126:8126/tcp"
+      - "8125:8125/udp"
+{% else %}
     network_mode: host
+{% endif %}
     environment:
       - DD_API_KEY={{ dd_api_key }}
       - DD_HOSTNAME={{ inventory_hostname }}
@@ -17,6 +26,7 @@ services:
       - DD_TAGS=group:griddog
       - DD_APM_ENABLED=true
       - DD_APM_NON_LOCAL_TRAFFIC=true
+      - DD_DOGSTATSD_NON_LOCAL_TRAFFIC=true
 {% if inventory_hostname in groups['databases'] %}
       - DD_LOGS_CONFIG_AUTO_MULTI_LINE_ENABLE_DATETIME_DETECTION=true
       - DD_LOGS_CONFIG_AUTO_MULTI_LINE_ENABLE_JSON_DETECTION=true
@@ -32,3 +42,10 @@ services:
 {% endif %}
     labels:
       com.datadoghq.ad.logs: '[{"source": "docker", "service": "datadog-agent", "env": "{{ dd_env }}", "version": "griddog-1.0"}]'
+
+{% if inventory_hostname in groups['app'] %}
+networks:
+  griddog-network:
+    external: true
+    name: griddog_network
+{% endif %}
