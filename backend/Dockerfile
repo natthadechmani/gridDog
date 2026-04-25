@@ -12,10 +12,13 @@ RUN go mod download
 
 # Copy source and build a statically linked binary
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-s -w" \
-    -o /app/server \
-    ./main.go
+
+# Install Orchestrion
+RUN go install github.com/DataDog/orchestrion@latest
+
+# Build with Orchestrion instrumentation
+RUN GOARCH=amd64 orchestrion go build \
+    -o /app/server .
 
 # ─── Stage 2: Runtime ─────────────────────────────────────────────────────────
 FROM alpine:3.19
