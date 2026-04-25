@@ -78,7 +78,7 @@ resource "aws_instance" "nginx" {
 # ---------------------------------------------------------------------------
 resource "aws_instance" "frontend" {
   ami                         = data.aws_ami.ubuntu.id
-  instance_type               = "t3.small"
+  instance_type               = "t3.medium"
   subnet_id                   = aws_subnet.private.id
   vpc_security_group_ids      = [aws_security_group.frontend.id]
   key_name                    = var.key_name
@@ -123,7 +123,7 @@ resource "aws_instance" "app" {
 # ---------------------------------------------------------------------------
 resource "aws_instance" "databases" {
   ami                         = data.aws_ami.ubuntu.id
-  instance_type               = "t3.small"
+  instance_type               = "t3.medium"
   subnet_id                   = aws_subnet.private.id
   vpc_security_group_ids      = [aws_security_group.databases.id]
   key_name                    = var.key_name
@@ -133,7 +133,7 @@ resource "aws_instance" "databases" {
 
   root_block_device {
     volume_type           = "gp3"
-    volume_size           = 8
+    volume_size           = 20
     delete_on_termination = true
   }
 
