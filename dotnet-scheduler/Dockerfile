@@ -41,4 +41,7 @@ ENV CORECLR_PROFILER={846F5F1C-F9AE-4B07-969E-05C26BC060D8}
 ENV CORECLR_PROFILER_PATH=/opt/datadog/Datadog.Trace.ClrProfiler.Native.so
 ENV DD_DOTNET_TRACER_HOME=/opt/datadog
 
+# Required for Linux profiler — wraps Linux syscalls for CPU and wall time profiling
+ENV LD_PRELOAD=/opt/datadog/continuousprofiler/Datadog.Linux.ApiWrapper.x64.so
+
 ENTRYPOINT ["dotnet", "dotnet-scheduler.dll"]
