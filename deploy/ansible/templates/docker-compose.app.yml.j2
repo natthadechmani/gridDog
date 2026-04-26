@@ -18,9 +18,15 @@ services:
       DATABASE_URL: "jdbc:postgresql://{{ databases_private_ip }}:5432/griddog"
       DB_USER: griddog
       DB_PASSWORD: "{{ db_password }}"
+      DD_SERVICE: "java-backend-vm"
+      DD_VERSION: "2.0.1"
+      DD_ENV: "{{ dd_env }}"
     labels:
       my.custom.label.team: 'java-backend-team'
       com.datadoghq.ad.logs: '[{"source": "java"}]'
+      com.datadoghq.tags.env: "{{ dd_env }}"
+      com.datadoghq.tags.service: "java-backend-vm"
+      com.datadoghq.tags.version: "2.0.1"
     logging:
       driver: json-file
       options:
