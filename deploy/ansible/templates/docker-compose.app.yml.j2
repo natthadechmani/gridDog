@@ -103,6 +103,7 @@ services:
       DD_LOGS_INJECTION: "true"
       DD_RUNTIME_METRICS_ENABLED: "true"
       DD_PROFILING_ENABLED: "true"
+      DD_TRACE_SAMPLING_RULES: '[{"service": "go-backend-vm", "sample_rate": 1.0}]'
     labels:
       my.custom.label.team: 'golang-backend-team'
       com.datadoghq.ad.logs: '[{"source": "go"}]'
