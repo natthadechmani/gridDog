@@ -1,8 +1,5 @@
 FROM node:20-alpine
 
-# Create a non-root user and group
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-
 WORKDIR /app
 
 # Copy dependency manifests first for layer caching
@@ -16,11 +13,6 @@ RUN npm install dd-trace
 
 # Copy application source
 COPY index.js ./
-
-# Transfer ownership to the non-root user
-RUN chown -R appuser:appgroup /app
-
-USER appuser
 
 EXPOSE 3001
 

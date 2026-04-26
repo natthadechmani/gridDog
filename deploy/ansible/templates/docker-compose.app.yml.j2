@@ -50,9 +50,18 @@ services:
     environment:
       PORT: "3001"
       MONGODB_URI: "mongodb://{{ databases_private_ip }}:27017/griddog"
+      DD_SERVICE: "express-service-vm"
+      DD_VERSION: "3.0.1"
+      DD_ENV: "{{ dd_env }}"
+      DD_AGENT_HOST: datadog-agent
+      DD_LOGS_INJECTION: "true"
+      DD_RUNTIME_METRICS_ENABLED: "true"
     labels:
       my.custom.label.team: 'express-team'
       com.datadoghq.ad.logs: '[{"source": "nodejs"}]'
+      com.datadoghq.tags.env: "{{ dd_env }}"
+      com.datadoghq.tags.service: "express-service-vm"
+      com.datadoghq.tags.version: "3.0.1"
     logging:
       driver: json-file
       options:

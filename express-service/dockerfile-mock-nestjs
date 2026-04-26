@@ -1,0 +1,28 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy dependency manifests first for layer caching
+COPY package.json package-lock.json* ./
+
+# [NEST.JS] Install ALL dependencies, not just production —
+# NestJS needs devDependencies (TypeScript compiler, @nestjs/cli, etc.) to run `npm run build`
+RUN npm install
+
+# Install Datadog tracer — separate layer so app deps are cached independently
+RUN npm install dd-trace
+
+# [NEST.JS] Copy all source files before build — NestJS needs src/ to compile TypeScript
+COPY . .
+
+# [NEST.JS] TypeScript compiler outputs compiled JS into dist/
+RUN npm run build
+
+EXPOSE 3000
+
+# NODE_OPTIONS loads dd-trace before NestJS starts — no code changes required
+ENV NODE_OPTIONS="--require dd-trace/init"
+
+# [NEST.JS] Run the compiled output directly — NestJS entry point is always dist/main.js
+# Unlike Next.js (npm start) or Express (node index.js), NestJS uses node dist/main
+CMD ["node", "dist/main"]

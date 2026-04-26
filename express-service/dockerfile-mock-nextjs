@@ -1,0 +1,27 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy dependency manifests first for layer caching
+COPY package.json package-lock.json* ./
+
+# [NEXT.JS] Install ALL dependencies, not just production —
+# Next.js needs devDependencies (TypeScript, ESLint, etc.) to run `npm run build`
+RUN npm install
+
+# Install Datadog tracer — separate layer so app deps are cached independently
+RUN npm install dd-trace
+
+# [NEXT.JS] Copy all source files before build — Next.js needs pages/, components/, etc.
+COPY . .
+
+# [NEXT.JS] Compile the app into .next/ output folder
+RUN npm run build
+
+EXPOSE 3000
+
+# NODE_OPTIONS loads dd-trace before Next.js starts — no code changes required
+ENV NODE_OPTIONS="--require dd-trace/init"
+
+# [NEXT.JS] npm start runs `next start` which serves the pre-built .next/ folder
+CMD ["npm", "start"]
