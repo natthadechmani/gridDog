@@ -21,6 +21,10 @@ services:
       DD_SERVICE: "java-backend-vm"
       DD_VERSION: "2.0.1"
       DD_ENV: "{{ dd_env }}"
+      DD_AGENT_HOST: datadog-agent
+      DD_LOGS_INJECTION: "true"
+      DD_RUNTIME_METRICS_ENABLED: "true"
+      DD_PROFILING_ENABLED: "true"
     labels:
       my.custom.label.team: 'java-backend-team'
       com.datadoghq.ad.logs: '[{"source": "java"}]'
@@ -56,6 +60,7 @@ services:
       DD_AGENT_HOST: datadog-agent
       DD_LOGS_INJECTION: "true"
       DD_RUNTIME_METRICS_ENABLED: "true"
+      DD_PROFILING_ENABLED: "true"
     labels:
       my.custom.label.team: 'express-team'
       com.datadoghq.ad.logs: '[{"source": "nodejs"}]'
