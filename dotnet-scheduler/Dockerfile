@@ -14,14 +14,14 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0
 
 # Install the Datadog .NET tracer — uses the CLR Profiler API (native .so library).
 # Unlike Java (-javaagent) or Node (--require), .NET requires a native package installed
-# in the container. createLogPath.sh creates /var/log/datadog/dotnet with correct permissions.
+# in the container. aspnet:8.0 is Debian-based so we use the .deb installer.
+# createLogPath.sh creates /var/log/datadog/dotnet with correct permissions.
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/* \
-    && curl -Lo /tmp/datadog-dotnet-apm.tar.gz \
-       https://github.com/DataDog/dd-trace-dotnet/releases/download/v3.14.0/datadog-dotnet-apm-3.14.0.tar.gz \
-    && mkdir -p /opt/datadog \
-    && tar -C /opt/datadog -xzf /tmp/datadog-dotnet-apm.tar.gz \
-    && rm /tmp/datadog-dotnet-apm.tar.gz \
-    && sh /opt/datadog/createLogPath.sh
+    && curl -Lo /tmp/datadog-dotnet-apm.deb \
+       https://github.com/DataDog/dd-trace-dotnet/releases/download/v3.14.0/datadog-dotnet-apm_3.14.0_amd64.deb \
+    && dpkg -i /tmp/datadog-dotnet-apm.deb \
+    && rm /tmp/datadog-dotnet-apm.deb \
+    && /opt/datadog/createLogPath.sh
 
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 
