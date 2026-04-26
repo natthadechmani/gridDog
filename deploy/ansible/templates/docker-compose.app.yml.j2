@@ -139,9 +139,18 @@ services:
     environment:
       PORT: "5000"
       DATABASE_URL: "Host={{ databases_private_ip }};Port=5432;Database=griddog;Username=griddog;Password={{ db_password }}"
+      DD_SERVICE: "dotnet-scheduler-vm"
+      DD_VERSION: "1.0.0"
+      DD_ENV: "{{ dd_env }}"
+      DD_AGENT_HOST: datadog-agent
+      DD_LOGS_INJECTION: "true"
+      DD_RUNTIME_METRICS_ENABLED: "true"
     labels:
       my.custom.label.team: 'dotnet-team'
       com.datadoghq.ad.logs: '[{"source": "dotnet"}]'
+      com.datadoghq.tags.env: "{{ dd_env }}"
+      com.datadoghq.tags.service: "dotnet-scheduler-vm"
+      com.datadoghq.tags.version: "1.0.0"
     logging:
       driver: json-file
       options:
