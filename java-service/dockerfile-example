@@ -1,0 +1,18 @@
+FROM maven:3.9-eclipse-temurin-17
+
+WORKDIR /app
+
+# Download the datadog tracing library
+RUN curl -Lo dd-java-agent.jar 'https://dtdg.co/latest-java-tracer'
+
+# Copy dependencies and source code
+COPY pom.xml .
+COPY src ./src
+
+# Compile and package into JAR file
+RUN mvn package
+
+EXPOSE 8081
+
+# Run with tracing library
+ENTRYPOINT ["java", "-javaagent:dd-java-agent.jar", "-jar", "target/*.jar"]
