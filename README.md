@@ -12,6 +12,7 @@ gridDog/
 ├── backend/                       # Go (Gin) — port 8080
 ├── java-service/                  # Spring Boot 3.2 (Java 17) — port 8081
 ├── express-service/               # Express.js — port 3001 (MongoDB-backed shop items)
+├── dotnet-scheduler/              # .NET 8 — port 5000 (background job scheduler)
 ├── frontend/                      # Next.js 14 (App Router) — port 3000
 ├── traffic/                       # Puppeteer headless-Chrome traffic generator
 └── deploy/
@@ -56,8 +57,24 @@ Valid codes: `10OFF` (10%), `15OFF` (15%), `20OFF` (20%), `50OFF` (50%)
 | Go backend | `log/slog` | Structured JSON, `request_id` (UUID) on every log line |
 | Java service | Logback + LogstashEncoder | JSON with `service=java-service` field |
 | Express service | Winston | JSON with `service=express-service` field |
+| .NET scheduler | `Microsoft.Extensions.Logging` | Structured JSON (ASP.NET default console formatter) |
 
-Every route logs a descriptive `msg` string of the form `METHOD /path — what happened` (e.g. `"flow4: item inserted into postgres"`, `"GET /shop/items — fetched 6 item(s) from mongodb"`) plus structured fields for filtering (item IDs, compute results, durations, HTTP status codes). Success paths log at INFO, expected failures (invalid promo, 404 propagation) at WARN, unexpected errors at ERROR.
+Every route logs a descriptive `msg` string (except dotnet-scheduler which uses structured key-value logging) of the form `METHOD /path — what happened` (e.g. `"flow4: item inserted into postgres"`, `"GET /shop/items — fetched 6 item(s) from mongodb"`) plus structured fields for filtering (item IDs, compute results, durations, HTTP status codes). Success paths log at INFO, expected failures (invalid promo, 404 propagation) at WARN, unexpected errors at ERROR.
+
+---
+
+## Datadog Instrumentation
+
+All four backend services are instrumented for APM tracing, metrics, and log injection. See [docs/datadog-setup.md](docs/datadog-setup.md) for step-by-step setup details.
+
+| Service | Instrumentation method |
+|---------|------------------------|
+| Go backend | Orchestrion — compile-time source rewriting via `orchestrion go build` |
+| Java service | `-javaagent:dd-java-agent.jar` — JVM bytecode instrumentation at class-load time |
+| Express service | `dd-trace` npm package via `NODE_OPTIONS="--require dd-trace/init"` (monkey-patching) |
+| .NET scheduler | CLR Profiler API — native `.so` activated via `CORECLR_*` env vars + `LD_PRELOAD` |
+
+All services use **unified service tagging** (`DD_SERVICE`, `DD_ENV`, `DD_VERSION` + matching Docker labels) and set `DD_LOGS_INJECTION=true` to correlate log lines with their parent trace.
 
 ---
 
@@ -77,40 +94,23 @@ Datadog-themed dark dashboard (`#0F1117` background, `#7B4FFF` purple accent):
 
 ## Deployment
 
-### 1. VM (EC2)
+### 1. VM (EC2) — Ansible (current)
 
-Deploy each service on a separate EC2 instance. Designed for **Thailand (ap-southeast-7)** and **Singapore (ap-southeast-1)**, each with 2 AZs.
+Deploy each service on a separate EC2 instance using Ansible. See [deploy/ansible/README.md](deploy/ansible/README.md) for the full guide.
 
-**Recommended instance types:** `t3.micro` for nginx and frontend, `t3.small` for app (Go+Java+Express) and databases.
-
-Run in order on each node:
+**Recommended instance types:** `t3.micro` for nginx and frontend, `t3.small` for app (Go+Java+Express+.NET) and databases.
 
 ```bash
-# All nodes
-sudo bash deploy/vm/setup-common.sh
-
-# PostgreSQL node
-sudo bash deploy/vm/setup-postgres.sh
-
-# Backend node
-sudo JAVA_SERVICE_URL=http://<java-ip>:8081 \
-     EXPRESS_SERVICE_URL=http://<express-ip>:3001 \
-     DATABASE_URL=postgres://griddog:griddog@<db-ip>:5432/griddog \
-     bash deploy/vm/setup-backend.sh
-
-# Java node
-sudo DATABASE_URL=jdbc:postgresql://<db-ip>:5432/griddog \
-     bash deploy/vm/setup-java.sh
-
-# Express node
-sudo bash deploy/vm/setup-express.sh
-
-# Frontend node
-sudo NEXT_PUBLIC_BACKEND_URL=http://<backend-ip>:8080 \
-     bash deploy/vm/setup-frontend.sh
+cd deploy/ansible
+ansible-playbook playbooks/01_databases.yml   # postgres + mongodb
+ansible-playbook playbooks/02_app.yml         # backend + java-service + express + dotnet-scheduler
+ansible-playbook playbooks/03_frontend.yml    # Next.js frontend
+ansible-playbook playbooks/04_nginx.yml       # nginx reverse proxy
+ansible-playbook playbooks/05_traffic.yml     # Puppeteer traffic generator
+ansible-playbook playbooks/06_datadog.yml     # Datadog agent (all EC2s)
 ```
 
-See [deploy/vm/architecture.md](deploy/vm/architecture.md) for full EC2 layout, VPC CIDRs, and security group rules per region.
+See [deploy/vm/architecture.md](deploy/vm/architecture.md) for EC2 layout, VPC CIDRs, and security group rules.
 
 ---
 

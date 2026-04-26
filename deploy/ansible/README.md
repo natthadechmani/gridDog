@@ -45,7 +45,7 @@ Internet
 |-----|------------|---------------|
 | griddog-nginx | nginx | :80 (public) |
 | griddog-frontend | griddog-frontend, griddog-traffic | :3000, :3002 |
-| griddog-app | griddog-backend, griddog-java-service, griddog-express-service | :8080 |
+| griddog-app | griddog-backend, griddog-java-service, griddog-express-service, griddog-dotnet-scheduler | :8080 |
 | griddog-databases | postgres, mongodb | :5432, :27017 |
 
 ### Networking rules
@@ -221,9 +221,11 @@ Run in this order — later services depend on earlier ones:
 
 ```bash
 ansible-playbook playbooks/01_databases.yml   # postgres + mongodb
-ansible-playbook playbooks/02_app.yml         # backend + java-service + express (needs databases)
-ansible-playbook playbooks/03_frontend.yml    # Next.js + Puppeteer traffic generator
+ansible-playbook playbooks/02_app.yml         # backend + java-service + express + dotnet-scheduler (needs databases)
+ansible-playbook playbooks/03_frontend.yml    # Next.js frontend
 ansible-playbook playbooks/04_nginx.yml       # nginx reverse proxy (needs frontend + app IPs)
+ansible-playbook playbooks/05_traffic.yml     # Puppeteer traffic generator (frontend EC2)
+ansible-playbook playbooks/06_datadog.yml     # Datadog agent (deployed to all EC2s)
 ```
 
 ### Redeploy after code changes
@@ -231,9 +233,11 @@ ansible-playbook playbooks/04_nginx.yml       # nginx reverse proxy (needs front
 Only redeploy the EC2 that changed:
 
 ```bash
-ansible-playbook playbooks/02_app.yml      # after backend / java-service / express-service changes
+ansible-playbook playbooks/02_app.yml      # after backend / java-service / express-service / dotnet-scheduler changes
 ansible-playbook playbooks/03_frontend.yml # after frontend changes
 ansible-playbook playbooks/04_nginx.yml    # after nginx.conf changes
+ansible-playbook playbooks/05_traffic.yml  # after traffic generator changes
+ansible-playbook playbooks/06_datadog.yml  # after Datadog agent config changes (reruns on all hosts)
 ```
 
 ---
@@ -302,14 +306,18 @@ deploy/ansible/
 │   └── all.yml.example                  # Template (safe to commit)
 ├── playbooks/
 │   ├── 01_databases.yml                 # postgres + mongodb on griddog-databases
-│   ├── 02_app.yml                       # backend + java-service + express on griddog-app
-│   ├── 03_frontend.yml                  # frontend + traffic generator on griddog-frontend
-│   └── 04_nginx.yml                     # nginx on griddog-nginx
+│   ├── 02_app.yml                       # backend + java-service + express + dotnet-scheduler on griddog-app
+│   ├── 03_frontend.yml                  # Next.js frontend on griddog-frontend
+│   ├── 04_nginx.yml                     # nginx on griddog-nginx
+│   ├── 05_traffic.yml                   # Puppeteer traffic generator on griddog-frontend
+│   └── 06_datadog.yml                   # Datadog agent on all EC2s
 └── templates/
     ├── docker-compose.databases.yml.j2  # postgres + mongodb
-    ├── docker-compose.app.yml.j2        # backend + java-service + express-service
-    ├── docker-compose.frontend.yml.j2   # Next.js frontend + Puppeteer traffic generator
+    ├── docker-compose.app.yml.j2        # backend + java-service + express-service + dotnet-scheduler
+    ├── docker-compose.frontend.yml.j2   # Next.js frontend
+    ├── docker-compose.traffic.yml.j2    # Puppeteer traffic generator
     ├── docker-compose.nginx.yml.j2      # nginx container
+    ├── docker-compose.datadog.yml.j2    # Datadog agent (all hosts; joins griddog-network on app host)
     └── nginx.conf.j2                    # nginx reverse proxy config (uses private IPs)
 ```
 
@@ -431,3 +439,38 @@ ansible all -m shell -a "docker system prune -f"
 - Check `github_pat` in `group_vars/all.yml`
 - The PAT needs `repo` scope
 - PATs expire — generate a new one at https://github.com/settings/tokens
+
+### No traces appearing in Datadog APM
+
+Three things must all be in place on the app host:
+1. `DD_AGENT_HOST: datadog-agent` is set in every app service environment (not `localhost`)
+2. The Datadog agent container is on the `griddog_network` bridge — check `docker-compose.datadog.yml.j2` has `networks: griddog-network: external: true`
+3. `DD_APM_ENABLED=true` and `DD_APM_NON_LOCAL_TRAFFIC=true` are set on the agent
+
+Run `ansible-playbook playbooks/06_datadog.yml` to redeploy the agent after config changes.
+
+### Datadog agent fails to start on app host — network error
+
+The agent must join the `griddog_network` Docker bridge so app containers can reach it by name.
+Check that `docker-compose.datadog.yml.j2` includes the `networks:` section with `external: true`
+for the `griddog_network` (this block is conditional on `inventory_hostname in groups['app']`).
+
+### No profiling data for .NET in Datadog Continuous Profiler
+
+Both of these must be set:
+1. `LD_PRELOAD=/opt/datadog/continuousprofiler/Datadog.Linux.ApiWrapper.x64.so` in `dotnet-scheduler/Dockerfile`
+2. `DD_PROFILING_ENABLED: "true"` in the dotnet-scheduler environment in `docker-compose.app.yml.j2`
+
+Rebuild and redeploy: `ansible-playbook playbooks/02_app.yml`
+
+### Stale Docker image hash error during deploy
+
+If Docker reports `No such image: sha256:...`, stale image references exist on the host.
+SSH to the app EC2 and clean up:
+
+```bash
+docker compose down --remove-orphans
+docker image prune -f
+```
+
+Then re-run `ansible-playbook playbooks/02_app.yml`.
