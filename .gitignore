@@ -2,11 +2,11 @@
 deploy/docker/.env
 
 # Terraform — never commit real variable values or state
-deploy/terraform/terraform.tfvars
-deploy/terraform/.terraform/
-deploy/terraform/.terraform.lock.hcl
-deploy/terraform/terraform.tfstate
-deploy/terraform/terraform.tfstate.backup
+deploy/vm/terraform/terraform.tfvars
+deploy/vm/terraform/.terraform/
+deploy/vm/terraform/.terraform.lock.hcl
+deploy/vm/terraform/terraform.tfstate
+deploy/vm/terraform/terraform.tfstate.backup
 
 # Ansible — never commit real secrets
-deploy/ansible/group_vars/all.yml
+deploy/vm/ansible/group_vars/all.yml

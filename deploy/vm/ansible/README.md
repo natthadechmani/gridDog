@@ -105,7 +105,7 @@ chmod 400 ~/.ssh/griddog-keypair.pem
 ### 1. Apply Terraform (if not done already)
 
 ```bash
-cd deploy/terraform
+cd deploy/vm/terraform
 aws sso login --profile griddog        # refresh SSO if expired
 AWS_PROFILE=griddog terraform apply
 ```
@@ -118,7 +118,7 @@ AWS_PROFILE=griddog terraform output
 
 ### 2. Fill in `inventory.ini`
 
-Edit `deploy/ansible/inventory.ini` with IPs from `terraform output`:
+Edit `deploy/vm/ansible/inventory.ini` with IPs from `terraform output`:
 
 ```ini
 [nginx]
@@ -139,7 +139,7 @@ Private EC2s use nginx as an SSH jump host (`-J`). nginx itself is reached direc
 ### 3. Create `group_vars/all.yml`
 
 ```bash
-cd deploy/ansible
+cd deploy/vm/ansible
 cp group_vars/all.yml.example group_vars/all.yml
 ```
 
@@ -153,7 +153,7 @@ repo_url: "https://{{ github_pat }}@github.com/natthadechmani/gridDog.git"
 repo_branch: master
 repo_dir: /opt/griddog
 
-# Must match what you set in deploy/terraform/terraform.tfvars
+# Must match what you set in deploy/vm/terraform/terraform.tfvars
 db_password: "your-db-password"
 
 # From: terraform output
@@ -170,7 +170,7 @@ alb_dns: "griddog-alb-xxxx.ap-southeast-1.elb.amazonaws.com"
 
 ### 4. Ensure your IP is in the ALB allowlist
 
-The ALB only accepts HTTP from the CIDRs listed in `deploy/terraform/terraform.tfvars`:
+The ALB only accepts HTTP from the CIDRs listed in `deploy/vm/terraform/terraform.tfvars`:
 
 ```hcl
 alb_allowed_cidrs = ["YOUR.IP.ADDRESS/32"]
@@ -199,7 +199,7 @@ ssh -i ~/.ssh/griddog-keypair.pem -J ubuntu@<NGINX_PUBLIC_IP> ubuntu@<DATABASES_
 ### 6. Test connectivity
 
 ```bash
-cd deploy/ansible
+cd deploy/vm/ansible
 ansible all -m ping
 ```
 
@@ -297,7 +297,7 @@ ssh -i ~/.ssh/griddog-keypair.pem -J ubuntu@<NGINX_PUBLIC_IP> ubuntu@<DATABASES_
 ## Directory structure
 
 ```
-deploy/ansible/
+deploy/vm/ansible/
 ├── ansible.cfg                          # SSH key, remote user, inventory path
 ├── inventory.ini                        # Hosts + IPs (fill from terraform output)
 ├── site.yml                             # Master playbook — runs all 4 in order
@@ -362,7 +362,7 @@ ssh -i ~/.ssh/griddog-keypair.pem -J ubuntu@<NGINX_PUBLIC_IP> ubuntu@<PRIVATE_IP
 
 ### Private EC2 SSH connection times out
 
-The nginx EC2 security group needs egress rules on port 22 to the private EC2 security groups. These are defined in `deploy/terraform/security_groups.tf` as `nginx_egress_ssh_*`. If missing, run `AWS_PROFILE=griddog terraform apply`.
+The nginx EC2 security group needs egress rules on port 22 to the private EC2 security groups. These are defined in `deploy/vm/terraform/security_groups.tf` as `nginx_egress_ssh_*`. If missing, run `AWS_PROFILE=griddog terraform apply`.
 
 ### Repo branch not found during clone
 
@@ -397,7 +397,7 @@ Or re-run the playbook with `--force-handlers` if the template task triggered a 
 
 ### ALB times out (connection refused or timeout)
 
-Your IP may not be in `alb_allowed_cidrs`. Update `deploy/terraform/terraform.tfvars`:
+Your IP may not be in `alb_allowed_cidrs`. Update `deploy/vm/terraform/terraform.tfvars`:
 
 ```hcl
 alb_allowed_cidrs = ["YOUR.CURRENT.IP/32"]

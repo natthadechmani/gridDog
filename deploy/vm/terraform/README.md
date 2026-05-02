@@ -63,7 +63,7 @@ chmod 400 ~/.ssh/griddog-keypair.pem
 ## First-time setup
 
 ```bash
-cd deploy/terraform
+cd deploy/vm/terraform
 
 # Copy the example and fill in real values
 cp terraform.tfvars.example terraform.tfvars

@@ -11,7 +11,7 @@ repo_dir: /opt/griddog
 # DB password — must match terraform var db_password
 db_password: "your-db-password"
 
-# Fill in from: cd deploy/terraform && terraform output
+# Fill in from: cd deploy/vm/terraform && terraform output
 nginx_public_ip:      "54.x.x.x"
 app_private_ip:       "172.31.x.x"
 frontend_private_ip:  "172.31.x.x"

@@ -96,12 +96,12 @@ Datadog-themed dark dashboard (`#0F1117` background, `#7B4FFF` purple accent):
 
 ### 1. VM (EC2) — Ansible (current)
 
-Deploy each service on a separate EC2 instance using Ansible. See [deploy/ansible/README.md](deploy/ansible/README.md) for the full guide.
+Deploy each service on a separate EC2 instance using Ansible. See [deploy/vm/ansible/README.md](deploy/vm/ansible/README.md) for the full guide.
 
 **Recommended instance types:** `t3.micro` for nginx and frontend, `t3.small` for app (Go+Java+Express+.NET) and databases.
 
 ```bash
-cd deploy/ansible
+cd deploy/vm/ansible
 ansible-playbook playbooks/01_databases.yml   # postgres + mongodb
 ansible-playbook playbooks/02_app.yml         # backend + java-service + express + dotnet-scheduler
 ansible-playbook playbooks/03_frontend.yml    # Next.js frontend

@@ -9,8 +9,8 @@ Use this as a guidebook to reproduce, extend, or troubleshoot the setup.
 
 ## Step 1 — Deploy Datadog Agent (all hosts)
 
-**Ansible playbook:** `deploy/ansible/playbooks/06_datadog.yml`
-**Template:** `deploy/ansible/templates/docker-compose.datadog.yml.j2`
+**Ansible playbook:** `deploy/vm/ansible/playbooks/06_datadog.yml`
+**Template:** `deploy/vm/ansible/templates/docker-compose.datadog.yml.j2`
 
 Runs `registry.datadoghq.com/agent:latest` in **host network mode** on all 4 EC2s.
 `recreate: always` ensures the agent restarts on every playbook run to pick up config changes.
@@ -58,7 +58,7 @@ Runs `registry.datadoghq.com/agent:latest` in **host network mode** on all 4 EC2
 ### Deploy command
 
 ```bash
-cd deploy/ansible
+cd deploy/vm/ansible
 ansible-playbook playbooks/06_datadog.yml
 # or limit to one host:
 ansible-playbook playbooks/06_datadog.yml --limit databases
@@ -89,7 +89,7 @@ com.datadoghq.ad.init_configs: '[{}]'
 com.datadoghq.ad.instances: '[{"host":"%%host%%","port":5432,"username":"datadog","password":"{{ dd_postgres_password }}"}]'
 ```
 
-Variable `dd_postgres_password` is set in `deploy/ansible/group_vars/all.yml`.
+Variable `dd_postgres_password` is set in `deploy/vm/ansible/group_vars/all.yml`.
 
 ---
 
@@ -104,7 +104,7 @@ PostgreSQL writes structured logs via its own `logging_collector` — this goes 
 
 ### PostgreSQL logging configuration
 
-Set via `command` flags in `deploy/ansible/templates/docker-compose.databases.yml.j2`:
+Set via `command` flags in `deploy/vm/ansible/templates/docker-compose.databases.yml.j2`:
 
 ```yaml
 command: >
@@ -129,7 +129,7 @@ The directory must exist with open permissions **before** the container starts.
 If Docker creates it, it will be owned by root and PostgreSQL won't be able to write.
 
 ```yaml
-# In deploy/ansible/playbooks/01_databases.yml
+# In deploy/vm/ansible/playbooks/01_databases.yml
 - name: Create postgres log directory
   ansible.builtin.file:
     path: /var/log/postgresql
@@ -259,7 +259,7 @@ com.datadoghq.ad.instances: >
 
 `database_autodiscovery` automatically collects metrics from all databases (griddog, admin, local, config) without listing them explicitly.
 
-Variable `dd_mongo_password` is set in `deploy/ansible/group_vars/all.yml`.
+Variable `dd_mongo_password` is set in `deploy/vm/ansible/group_vars/all.yml`.
 
 ---
 
@@ -273,7 +273,7 @@ MongoDB 7 logs operations that exceed a threshold. The default threshold is **10
 
 Start `mongod` with `--slowms 0` to log **all** operations regardless of duration.
 
-In `deploy/ansible/templates/docker-compose.databases.yml.j2`:
+In `deploy/vm/ansible/templates/docker-compose.databases.yml.j2`:
 
 ```yaml
 command: mongod --slowms 0
@@ -364,7 +364,7 @@ Filter: `source:mongodb service:griddog-mongodb`
 ## Step 8 — APM / Distributed Tracing: Agent Setup
 
 APM requires three settings on the Datadog agent (already set in
-`deploy/ansible/templates/docker-compose.datadog.yml.j2`):
+`deploy/vm/ansible/templates/docker-compose.datadog.yml.j2`):
 
 | Variable | Value | Why |
 |----------|-------|-----|
@@ -453,7 +453,7 @@ RUN go install github.com/DataDog/orchestrion@latest
 RUN GOARCH=amd64 orchestrion go build -o /app/server .
 ```
 
-**docker-compose env vars** (`deploy/ansible/templates/docker-compose.app.yml.j2`):
+**docker-compose env vars** (`deploy/vm/ansible/templates/docker-compose.app.yml.j2`):
 
 ```yaml
 DD_SERVICE: "go-backend-vm"
@@ -488,7 +488,7 @@ RUN curl -Lo dd-java-agent.jar 'https://dtdg.co/latest-java-tracer'
 ENTRYPOINT ["java", "-javaagent:dd-java-agent.jar", "-jar", "app.jar"]
 ```
 
-**docker-compose env vars** (`deploy/ansible/templates/docker-compose.app.yml.j2`):
+**docker-compose env vars** (`deploy/vm/ansible/templates/docker-compose.app.yml.j2`):
 
 ```yaml
 DD_SERVICE: "java-backend-vm"
@@ -537,7 +537,7 @@ ENV NODE_OPTIONS="--require dd-trace/init"
 It is equivalent to adding `require('dd-trace').init()` as the first line of the app entry
 point — without modifying any source files.
 
-**docker-compose env vars** (`deploy/ansible/templates/docker-compose.app.yml.j2`):
+**docker-compose env vars** (`deploy/vm/ansible/templates/docker-compose.app.yml.j2`):
 
 ```yaml
 DD_SERVICE: "express-service-vm"
@@ -604,7 +604,7 @@ ENV LD_PRELOAD=/opt/datadog/continuousprofiler/Datadog.Linux.ApiWrapper.x64.so
 These are set as `ENV` in the Dockerfile (not docker-compose) because they point to paths
 that only exist inside the image — they are image facts, not runtime configuration.
 
-**docker-compose env vars** (`deploy/ansible/templates/docker-compose.app.yml.j2`):
+**docker-compose env vars** (`deploy/vm/ansible/templates/docker-compose.app.yml.j2`):
 
 ```yaml
 DD_SERVICE: "dotnet-scheduler-vm"
