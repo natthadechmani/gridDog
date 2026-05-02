@@ -1,0 +1,19 @@
+# Cluster bootstrap — apply once before any StatefulSet.
+# StorageClasses are cluster-scoped (no namespace) so they don't get the
+# sg-k8s- prefix and there's only ever one of them per cluster.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: ebs.csi.aws.com
+volumeBindingMode: WaitForFirstConsumer    # provision EBS in same AZ as the pod
+allowVolumeExpansion: true
+reclaimPolicy: Delete
+parameters:
+  type: gp3
+  fsType: ext4
+  iops: "3000"            # gp3 baseline (free)
+  throughput: "125"       # gp3 baseline (free, MB/s)
+  encrypted: "true"

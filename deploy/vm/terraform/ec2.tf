@@ -70,7 +70,10 @@ resource "aws_instance" "nginx" {
     delete_on_termination = true
   }
 
-  tags = { Name = "griddog-nginx" }
+  tags = {
+    Name    = "griddog-nginx"
+    datadog = "griddog"
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -92,7 +95,10 @@ resource "aws_instance" "frontend" {
     delete_on_termination = true
   }
 
-  tags = { Name = "griddog-frontend" }
+  tags = {
+    Name    = "griddog-frontend"
+    datadog = "griddog"
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -114,7 +120,10 @@ resource "aws_instance" "app" {
     delete_on_termination = true
   }
 
-  tags = { Name = "griddog-app" }
+  tags = {
+    Name    = "griddog-app"
+    datadog = "griddog"
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -137,7 +146,10 @@ resource "aws_instance" "databases" {
     delete_on_termination = true
   }
 
-  tags = { Name = "griddog-databases" }
+  tags = {
+    Name    = "griddog-databases"
+    datadog = "griddog"
+  }
 }
 
 # EBS volume for Postgres data (/data/postgres)

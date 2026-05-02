@@ -1,0 +1,65 @@
+name: Build & push EKS images
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'backend/**'
+      - 'java-service/**'
+      - 'express-service/**'
+      - 'dotnet-scheduler/**'
+      - 'frontend/**'
+      - 'traffic/**'
+      - '.github/workflows/build-images.yml'
+  workflow_dispatch:
+    inputs:
+      services:
+        description: 'Space-separated services to build (default: all)'
+        required: false
+        default: 'backend java-service express-service dotnet-scheduler frontend traffic'
+
+env:
+  AWS_REGION: ap-southeast-1
+  # Set as repo secret: terraform output github_actions_role_arn
+  AWS_ROLE_ARN: ${{ secrets.AWS_ECR_PUSH_ROLE_ARN }}
+
+permissions:
+  id-token: write     # required for OIDC
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push images
+        env:
+          TAG: ${{ github.sha }}
+          SERVICES: ${{ github.event.inputs.services || 'backend java-service express-service dotnet-scheduler frontend traffic' }}
+        run: |
+          chmod +x deploy/kubernetes/scripts/build-and-push.sh
+          deploy/kubernetes/scripts/build-and-push.sh
+
+      # Optional next step: roll out the new tag with kubectl set image.
+      # Disabled by default — uncomment + add the kubeconfig setup once you
+      # want CI to trigger production deploys automatically.
+      #
+      # - name: Roll out new images
+      #   env:
+      #     TAG: ${{ github.sha }}
+      #   run: |
+      #     aws eks update-kubeconfig --name griddog-eks --region $AWS_REGION
+      #     for svc in backend java-service express-service dotnet-scheduler frontend traffic; do
+      #       kubectl -n griddog set image deployment/sg-k8s-$svc \
+      #         $svc=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.$AWS_REGION.amazonaws.com/griddog/$svc:$TAG
+      #     done

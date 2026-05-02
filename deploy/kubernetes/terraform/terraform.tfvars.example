@@ -1,0 +1,14 @@
+# Copy this file to terraform.tfvars and fill in real values.
+# terraform.tfvars is gitignored — never commit it.
+
+# Your IP address for SSH/admin access. Run: curl ifconfig.me
+# Used for: EKS public API endpoint allow-list AND ALB ingress allow-list.
+admin_cidrs = ["1.2.3.4/32"]
+
+# Optional overrides — defaults are usually fine
+# aws_region      = "ap-southeast-1"
+# cluster_name    = "griddog-eks"
+# cluster_version = "1.30"
+# vpc_id          = "vpc-0169d769cd12ce2ae"
+# github_repo     = "natthadechmani/gridDog"
+# github_branch   = "master"

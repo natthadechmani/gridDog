@@ -1,0 +1,9 @@
+# Cluster bootstrap — apply once before any other manifest.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: griddog
+  labels:
+    app.kubernetes.io/part-of: griddog
+    region: singapore
+    env: dev

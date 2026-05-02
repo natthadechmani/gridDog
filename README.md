@@ -16,9 +16,9 @@ gridDog/
 ├── frontend/                      # Next.js 14 (App Router) — port 3000
 ├── traffic/                       # Puppeteer headless-Chrome traffic generator
 └── deploy/
-    ├── vm/                        # EC2 systemd setup scripts
+    ├── vm/                        # 4× EC2 (Terraform + Ansible)
     ├── docker/                    # docker-compose (base + regional overrides)
-    └── kubernetes/                # Kustomize base + Thailand/Singapore overlays
+    └── kubernetes/                # EKS (Terraform) + plain k8s YAML, one file per service
 ```
 
 ---
@@ -154,24 +154,28 @@ Services and ports:
 
 ---
 
-### 3. Kubernetes
+### 3. Kubernetes (EKS)
 
-Uses Kustomize with a shared base and per-region overlays.
+Provisions an EKS cluster (Singapore), pushes images to ECR, and deploys all 9 services from per-service plain YAML files (one `kubectl apply -f` per service). See [deploy/kubernetes/README.md](deploy/kubernetes/README.md) for the full guide and [deploy/kubernetes/architecture.md](deploy/kubernetes/architecture.md) for the cluster topology.
+
+**Cluster shape:** 4 nodes across 3 managed node groups (frontend / backend with 2 replicas each / databases AZ-pinned). Single ALB front-door via the AWS Load Balancer Controller; nginx pod still does path routing for parity with the VM stack.
 
 ```bash
-# Base (local/dev)
-kubectl apply -k deploy/kubernetes/base
+cd deploy/kubernetes
 
-# Thailand overlay (namePrefix: th-, region: ap-southeast-7, az: ap-southeast-7a)
-kubectl apply -k deploy/kubernetes/overlays/thailand
+# 1. Provision (EKS + ECR + IAM, ~15-20 min)
+cd terraform && terraform init && terraform apply
 
-# Singapore overlay (namePrefix: sg-, region: ap-southeast-1, az: ap-southeast-1b)
-kubectl apply -k deploy/kubernetes/overlays/singapore
+# 2. Configure kubectl + apply secrets
+aws eks update-kubeconfig --name griddog-eks --region ap-southeast-1
+cp ../secrets.env.example ../secrets.env && $EDITOR ../secrets.env
+../scripts/apply-secrets.sh
+
+# 3. Build & push images, apply manifests, wire traffic generator
+../scripts/bootstrap.sh
 ```
 
-Includes: Namespace, ConfigMap, StatefulSet for Postgres, Deployments + Services for all 4 app services, and an HPA for the backend (min 2 / max 6 pods at 70% CPU).
-
-Regional overlays reduce replicas to 1 per Deployment for cost savings and patch the `REGION` config value.
+> The frontend uses **relative URLs** (no `NEXT_PUBLIC_BACKEND_URL` baked in), so the same image works for docker-compose, VM, and EKS without rebuilds. For local `npm run dev` against a separately-running backend, set `NEXT_PUBLIC_BACKEND_URL=http://localhost:8080` in `frontend/.env.local`.
 
 ---
 

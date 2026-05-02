@@ -1,7 +1,20 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(AWS_PROFILE=griddog aws ec2 describe-subnets --filters \"Name=vpc-id,Values=vpc-0169d769cd12ce2ae\" --region ap-southeast-1 --query 'Subnets[].[Tags[?Key==`Name`]|[0].Value,SubnetId,CidrBlock,AvailabilityZone,MapPublicIpOnLaunch]' --output table)",
+      "Bash(AWS_PROFILE=griddog aws ec2 describe-security-groups --filters \"Name=vpc-id,Values=vpc-0169d769cd12ce2ae\" --region ap-southeast-1 --query 'SecurityGroups[].[GroupName,GroupId]' --output table)",
+      "Bash(AWS_PROFILE=griddog aws elbv2 describe-load-balancers --region ap-southeast-1 --query 'LoadBalancers[].[LoadBalancerName,DNSName,Type,Scheme]' --output table)",
+      "Bash(chmod +x /Users/natthadech.manichot/Desktop/project/sandbox/gridDog/deploy/kubernetes/scripts/*.sh)",
+      "Bash(terraform fmt *)",
+      "Bash(kubectl kustomize *)",
+      "Bash(ln -sf ../../../../../database/init.sql init.sql)",
+      "Bash(unset OTEL_TRACES_EXPORTER)",
+      "Bash(echo \"---fmt done, exit=$?---\")",
+      "Bash(make help *)"
+    ],
+    "additionalDirectories": [
+      "/Users/natthadech.manichot/Desktop/project/sandbox/gridDog/deploy/kubernetes"
     ]
   }
 }

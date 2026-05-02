@@ -1,0 +1,86 @@
+# .NET 8 background scheduler — Deployment + Service.
+# 2 replicas spread across both backend nodes (anti-affinity).
+# CORECLR_* + LD_PRELOAD env vars (for Datadog continuous profiler) are
+# baked into the Dockerfile and active even with no agent reachable.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sg-k8s-dotnet-scheduler
+  namespace: griddog
+  labels:
+    app.kubernetes.io/name: dotnet-scheduler
+    app.kubernetes.io/part-of: griddog
+    region: singapore
+    env: dev
+spec:
+  selector:
+    app.kubernetes.io/name: dotnet-scheduler
+  ports:
+    - name: http
+      port: 5000
+      targetPort: 5000
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sg-k8s-dotnet-scheduler
+  namespace: griddog
+  labels:
+    app.kubernetes.io/name: dotnet-scheduler
+    app.kubernetes.io/part-of: griddog
+    region: singapore
+    env: dev
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dotnet-scheduler
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dotnet-scheduler
+        app.kubernetes.io/part-of: griddog
+        region: singapore
+        env: dev
+    spec:
+      nodeSelector:
+        griddog.io/role: backend
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: dotnet-scheduler
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: dotnet-scheduler
+          image: 369042512949.dkr.ecr.ap-southeast-1.amazonaws.com/griddog/dotnet-scheduler:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5000
+          env:
+            - name: PORT
+              value: "5000"
+            - name: ASPNETCORE_URLS
+              value: "http://+:5000"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: griddog-secrets
+                  key: db_password
+            - name: DATABASE_URL
+              value: Host=sg-k8s-postgres;Port=5432;Database=griddog;Username=griddog;Password=$(DB_PASSWORD)
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits:   { cpu: "500m", memory: "512Mi" }
+          readinessProbe:
+            httpGet: { path: /health, port: 5000 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: 5000 }
+            initialDelaySeconds: 30
+            periodSeconds: 30

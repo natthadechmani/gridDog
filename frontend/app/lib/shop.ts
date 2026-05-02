@@ -1,4 +1,9 @@
-export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080'
+// Empty default → browser uses the page's origin (relative URLs).
+// Works behind a same-origin reverse proxy like nginx, which is how
+// docker-compose, the VM stack, and EKS all serve frontend + /api/* together.
+// For local `npm run dev` against a separately-running backend, set
+// NEXT_PUBLIC_BACKEND_URL=http://localhost:8080 in frontend/.env.local
+export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || ''
 
 export const SHOP_ITEMS = [
   { id: 'tshirt',   name: 'Datadog T-Shirt',  price: 29.99, icon: '👕' },

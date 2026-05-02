@@ -1,0 +1,155 @@
+# PostgreSQL — StatefulSet + headless Service + init.sql ConfigMap
+# Pinned to the databases node group (single AZ ap-southeast-1b) so the
+# EBS-backed PVC always binds in the right zone.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sg-k8s-postgres-init
+  namespace: griddog
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: griddog
+    region: singapore
+    env: dev
+data:
+  init.sql: |
+    -- gridDog database initialisation
+    -- Assumes the target database (griddog) already exists and is the active connection.
+
+    CREATE TABLE IF NOT EXISTS items (
+        id         SERIAL PRIMARY KEY,
+        name       VARCHAR(255)             NOT NULL,
+        value      NUMERIC(10, 2)           NOT NULL DEFAULT 0,
+        created_at TIMESTAMP WITH TIME ZONE          DEFAULT NOW()
+    );
+
+    INSERT INTO items (name, value) VALUES
+        ('item-alpha',   100.50),
+        ('item-beta',    200.75),
+        ('item-gamma',    50.25),
+        ('item-delta',   300.00),
+        ('item-epsilon', 150.00)
+    ON CONFLICT DO NOTHING;
+
+    CREATE INDEX IF NOT EXISTS idx_items_created_at ON items (created_at);
+    CREATE INDEX IF NOT EXISTS idx_items_name       ON items (name);
+
+    CREATE TABLE IF NOT EXISTS promo_codes (
+        id               SERIAL PRIMARY KEY,
+        code             VARCHAR(50) UNIQUE NOT NULL,
+        discount_percent INT                NOT NULL,
+        is_active        BOOLEAN            NOT NULL DEFAULT true
+    );
+
+    INSERT INTO promo_codes (code, discount_percent, is_active) VALUES
+        ('10OFF', 10, true),
+        ('15OFF', 15, true),
+        ('20OFF', 20, true),
+        ('50OFF', 50, true)
+    ON CONFLICT DO NOTHING;
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sg-k8s-postgres
+  namespace: griddog
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: griddog
+    region: singapore
+    env: dev
+spec:
+  selector:
+    app.kubernetes.io/name: postgres
+  ports:
+    - name: pg
+      port: 5432
+      targetPort: 5432
+  clusterIP: None     # headless — gives per-pod DNS for the StatefulSet
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: sg-k8s-postgres
+  namespace: griddog
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: griddog
+    region: singapore
+    env: dev
+spec:
+  serviceName: sg-k8s-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/part-of: griddog
+        region: singapore
+        env: dev
+    spec:
+      nodeSelector:
+        griddog.io/role: databases
+      tolerations:
+        - key: griddog.io/role
+          operator: Equal
+          value: databases
+          effect: NoSchedule
+      containers:
+        - name: postgres
+          image: postgres:15
+          args:
+            - postgres
+            - -c
+            - log_statement=all
+            - -c
+            - log_line_prefix=%m [%p] %d [%a] %u %h %c
+          ports:
+            - name: pg
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: griddog
+            - name: POSTGRES_USER
+              value: griddog
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: griddog-secrets
+                  key: db_password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init-sql
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits:   { cpu: "500m", memory: "512Mi" }
+          readinessProbe:
+            exec: { command: [pg_isready, -U, griddog, -d, griddog] }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            exec: { command: [pg_isready, -U, griddog, -d, griddog] }
+            initialDelaySeconds: 30
+            periodSeconds: 30
+      volumes:
+        - name: init-sql
+          configMap:
+            name: sg-k8s-postgres-init
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 8Gi

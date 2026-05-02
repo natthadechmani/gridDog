@@ -1,0 +1,91 @@
+# Go backend (Gin) — Deployment + Service.
+# 2 replicas spread across both backend nodes (anti-affinity).
+# Talks to java/express/dotnet via in-cluster Service DNS.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sg-k8s-backend
+  namespace: griddog
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/part-of: griddog
+    region: singapore
+    env: dev
+spec:
+  selector:
+    app.kubernetes.io/name: backend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sg-k8s-backend
+  namespace: griddog
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/part-of: griddog
+    region: singapore
+    env: dev
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: backend
+        app.kubernetes.io/part-of: griddog
+        region: singapore
+        env: dev
+    spec:
+      nodeSelector:
+        griddog.io/role: backend
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: backend
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: backend
+          image: 369042512949.dkr.ecr.ap-southeast-1.amazonaws.com/griddog/backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: JAVA_SERVICE_URL
+              value: http://sg-k8s-java-service:8081
+            - name: EXPRESS_SERVICE_URL
+              value: http://sg-k8s-express-service:3001
+            - name: DOTNET_SCHEDULER_URL
+              value: http://sg-k8s-dotnet-scheduler:5000
+            - name: TRAFFIC_SERVICE_URL
+              value: http://sg-k8s-traffic:3002
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: griddog-secrets
+                  key: db_password
+            - name: DATABASE_URL
+              value: postgres://griddog:$(DB_PASSWORD)@sg-k8s-postgres:5432/griddog?sslmode=disable
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits:   { cpu: "500m", memory: "512Mi" }
+          readinessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 30
+            periodSeconds: 30

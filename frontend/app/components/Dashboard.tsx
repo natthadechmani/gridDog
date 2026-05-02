@@ -63,7 +63,9 @@ interface StressState {
 // Constants
 // ---------------------------------------------------------------------------
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080'
+// Empty default → browser uses the page's origin (relative URLs).
+// See frontend/app/lib/shop.ts for the rationale.
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || ''
 
 // ---------------------------------------------------------------------------
 // Helpers

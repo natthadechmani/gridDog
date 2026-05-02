@@ -10,3 +10,13 @@ deploy/vm/terraform/terraform.tfstate.backup
 
 # Ansible — never commit real secrets
 deploy/vm/ansible/group_vars/all.yml
+
+# EKS Terraform — never commit real variable values or state
+deploy/kubernetes/terraform/terraform.tfvars
+deploy/kubernetes/terraform/.terraform/
+deploy/kubernetes/terraform/.terraform.lock.hcl
+deploy/kubernetes/terraform/terraform.tfstate
+deploy/kubernetes/terraform/terraform.tfstate.backup
+
+# EKS Kubernetes Secret values
+deploy/kubernetes/secrets.env

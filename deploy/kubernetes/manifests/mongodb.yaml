@@ -1,0 +1,89 @@
+# MongoDB — StatefulSet + headless Service.
+# Pinned to the databases node group (single AZ ap-southeast-1b).
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sg-k8s-mongodb
+  namespace: griddog
+  labels:
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/part-of: griddog
+    region: singapore
+    env: dev
+spec:
+  selector:
+    app.kubernetes.io/name: mongodb
+  ports:
+    - name: mongo
+      port: 27017
+      targetPort: 27017
+  clusterIP: None
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: sg-k8s-mongodb
+  namespace: griddog
+  labels:
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/part-of: griddog
+    region: singapore
+    env: dev
+spec:
+  serviceName: sg-k8s-mongodb
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mongodb
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mongodb
+        app.kubernetes.io/part-of: griddog
+        region: singapore
+        env: dev
+    spec:
+      nodeSelector:
+        griddog.io/role: databases
+      tolerations:
+        - key: griddog.io/role
+          operator: Equal
+          value: databases
+          effect: NoSchedule
+      containers:
+        - name: mongodb
+          image: mongo:7
+          args: [mongod, --slowms, "0"]
+          ports:
+            - name: mongo
+              containerPort: 27017
+          volumeMounts:
+            - name: data
+              mountPath: /data/db
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits:   { cpu: "500m", memory: "512Mi" }
+          # tcpSocket probes are the standard for MongoDB in k8s — they
+          # check "is mongod listening on 27017?" in <100ms. Faster and more
+          # reliable than mongosh, which takes ~2-3s to cold-start (Node.js
+          # bootstrap) and times out the default 1s probe window.
+          readinessProbe:
+            tcpSocket:
+              port: 27017
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 27017
+            initialDelaySeconds: 30
+            periodSeconds: 30
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 8Gi

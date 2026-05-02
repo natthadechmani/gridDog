@@ -1,0 +1,72 @@
+# Puppeteer traffic generator — Deployment + Service.
+# TRAFFIC_BASE_URL is a placeholder; bootstrap.sh patches it to the real
+# ALB DNS post-apply via `kubectl set env`. The pod will crash-loop until
+# that patch is applied — harmless.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sg-k8s-traffic
+  namespace: griddog
+  labels:
+    app.kubernetes.io/name: traffic
+    app.kubernetes.io/part-of: griddog
+    region: singapore
+    env: dev
+spec:
+  selector:
+    app.kubernetes.io/name: traffic
+  ports:
+    - name: control
+      port: 3002
+      targetPort: 3002
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sg-k8s-traffic
+  namespace: griddog
+  labels:
+    app.kubernetes.io/name: traffic
+    app.kubernetes.io/part-of: griddog
+    region: singapore
+    env: dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: traffic
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: traffic
+        app.kubernetes.io/part-of: griddog
+        region: singapore
+        env: dev
+    spec:
+      nodeSelector:
+        griddog.io/role: frontend
+      containers:
+        - name: traffic
+          image: 369042512949.dkr.ecr.ap-southeast-1.amazonaws.com/griddog/traffic:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: control
+              containerPort: 3002
+          env:
+            - name: TRAFFIC_BASE_URL
+              value: http://pending      # set post-apply: kubectl set env deployment/sg-k8s-traffic TRAFFIC_BASE_URL=http://<alb-dns>
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits:   { cpu: "500m", memory: "512Mi" }
+          # Chrome/Puppeteer needs shared memory — emptyDir.medium=Memory
+          # is the k8s equivalent of docker-compose's --shm-size=2g.
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi
