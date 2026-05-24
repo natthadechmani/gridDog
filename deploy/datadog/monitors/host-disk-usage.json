@@ -1,0 +1,28 @@
+{
+  "name": "[GridDog] Host root disk usage high — {{host.name}}",
+  "type": "metric alert",
+  "query": "avg(last_30m):avg:system.disk.in_use{env:dev-vm,device:/dev/root} by {host} > 0.9",
+  "message": "Root disk on `{{host.name}}` is {{value}} full (threshold {{threshold}}).\n\n{{#is_alert}}**CRITICAL**: > 90% used for 30 minutes. The host will likely fail soon — investigate immediately.{{/is_alert}}\n{{#is_warning}}**WARNING**: > 80% used for 30 minutes. Investigate before it climbs further.{{/is_warning}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\n## Runbook\n[Open investigation runbook](https://app.datadoghq.com/notebook/14477914)\n\n## Dashboard\n[Open Host Disk dashboard](https://app.datadoghq.com/dashboard/$DASHBOARD_ID)\n\nQuick triage from your laptop:\n```\ncd deploy/vm/ansible\nansible {{host.name}} -i inventory.ini -b -m ansible.builtin.shell \\\n  -a \"du -h -d 1 -x / 2>/dev/null | sort -hr | head -10 && docker system df\"\n```\n\nMost likely culprits: unrotated container logs, Docker build cache, or journald sprawl. See the runbook for fix commands.\n\n@slack-griddog-alerts",
+  "tags": [
+    "env:dev-vm",
+    "group:griddog",
+    "service:host",
+    "team:griddog",
+    "resource:disk"
+  ],
+  "priority": 2,
+  "options": {
+    "thresholds": {
+      "critical": 0.9,
+      "warning": 0.8
+    },
+    "notify_no_data": true,
+    "no_data_timeframe": 20,
+    "evaluation_delay": 60,
+    "include_tags": true,
+    "renotify_interval": 120,
+    "new_host_delay": 300,
+    "require_full_window": false,
+    "notify_audit": false
+  }
+}

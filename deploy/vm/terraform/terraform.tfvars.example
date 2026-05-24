@@ -5,8 +5,12 @@ aws_region        = "ap-southeast-1"
 environment       = "sg"
 availability_zone = "ap-southeast-1b"
 
-# Your IP for SSH access — find it with: curl -s ifconfig.me
-admin_cidr = "1.2.3.4/32"
+# IPs allowed SSH access to all EC2s — add home, office, client site IPs
+admin_cidr = [
+  "1.2.3.4/32", # home IP
+  # "5.6.7.8/32", # office IP
+  # "9.10.11.12/32", # client site IP
+]
 
 # Name of the EC2 key pair already created in ap-southeast-1
 key_name = "griddog-keypair"

@@ -7,13 +7,13 @@ metadata:
   name: sg-k8s-java-service
   namespace: griddog
   labels:
-    app.kubernetes.io/name: java-service
+    app.kubernetes.io/name: java-service-k8s
     app.kubernetes.io/part-of: griddog
     region: singapore
     env: dev
 spec:
   selector:
-    app.kubernetes.io/name: java-service
+    app.kubernetes.io/name: java-service-k8s
   ports:
     - name: http
       port: 8081
@@ -26,19 +26,26 @@ metadata:
   name: sg-k8s-java-service
   namespace: griddog
   labels:
-    app.kubernetes.io/name: java-service
+    app.kubernetes.io/name: java-service-k8s
+    tags.datadoghq.com/service: "java-service-k8s"
     app.kubernetes.io/part-of: griddog
     region: singapore
     env: dev
 spec:
   replicas: 2
+  strategy:                              # ← NEW BLOCK
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0                        # never add an extra pod during rollout
+      maxUnavailable: 1   
   selector:
     matchLabels:
-      app.kubernetes.io/name: java-service
+      app.kubernetes.io/name: java-service-k8s
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: java-service
+        app.kubernetes.io/name: java-service-k8s
+        tags.datadoghq.com/service: "java-service-k8s"
         app.kubernetes.io/part-of: griddog
         region: singapore
         env: dev
@@ -47,11 +54,13 @@ spec:
         griddog.io/role: backend
       affinity:
         podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            - labelSelector:
-                matchLabels:
-                  app.kubernetes.io/name: java-service
-              topologyKey: kubernetes.io/hostname
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: java-service-k8s
+                topologyKey: kubernetes.io/hostname
       containers:
         - name: java-service
           image: 369042512949.dkr.ecr.ap-southeast-1.amazonaws.com/griddog/java-service:latest
@@ -71,6 +80,11 @@ spec:
                 secretKeyRef:
                   name: griddog-secrets
                   key: db_password
+            - name: DD_TRACE_AGENT_URL
+              value: 'unix:///var/run/datadog/apm.socket'
+          volumeMounts:
+            - name: apmsocketpath
+              mountPath: /var/run/datadog
           resources:
             requests: { cpu: "200m", memory: "512Mi" }
             limits:   { cpu: "1000m", memory: "768Mi" }
@@ -82,3 +96,7 @@ spec:
             httpGet: { path: /actuator/health, port: 8081 }
             initialDelaySeconds: 60
             periodSeconds: 30
+      volumes:
+        - hostPath:
+            path: /var/run/datadog/
+          name: apmsocketpath

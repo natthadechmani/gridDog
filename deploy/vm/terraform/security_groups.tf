@@ -90,7 +90,7 @@ resource "aws_security_group_rule" "nginx_ingress_ssh" {
   from_port         = 22
   to_port           = 22
   protocol          = "tcp"
-  cidr_blocks       = [var.admin_cidr]
+  cidr_blocks       = var.admin_cidr
   description       = "SSH from admin"
 }
 
@@ -193,7 +193,7 @@ resource "aws_security_group_rule" "frontend_ingress_ssh_admin" {
   from_port         = 22
   to_port           = 22
   protocol          = "tcp"
-  cidr_blocks       = [var.admin_cidr]
+  cidr_blocks       = var.admin_cidr
   description       = "SSH direct from admin"
 }
 
@@ -296,7 +296,7 @@ resource "aws_security_group_rule" "app_ingress_ssh_admin" {
   from_port         = 22
   to_port           = 22
   protocol          = "tcp"
-  cidr_blocks       = [var.admin_cidr]
+  cidr_blocks       = var.admin_cidr
   description       = "SSH direct from admin"
 }
 
@@ -379,7 +379,7 @@ resource "aws_security_group_rule" "databases_ingress_ssh_admin" {
   from_port         = 22
   to_port           = 22
   protocol          = "tcp"
-  cidr_blocks       = [var.admin_cidr]
+  cidr_blocks       = var.admin_cidr
   description       = "SSH direct from admin"
 }
 

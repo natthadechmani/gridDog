@@ -16,7 +16,8 @@ COPY . .
 # Install Orchestrion
 RUN go install github.com/DataDog/orchestrion@latest
 
-# Build with Orchestrion instrumentation
+RUN orchestrion pin
+
 RUN GOARCH=amd64 orchestrion go build \
     -o /app/server .
 

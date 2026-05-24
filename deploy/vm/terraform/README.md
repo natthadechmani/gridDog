@@ -35,15 +35,26 @@ aws --version
 ```
 
 ### 2. Authenticate via AWS SSO
+
+The profile is already configured in `~/.aws/config`. Just log in:
+
+```bash
+aws sso login --profile griddog
+aws sts get-caller-identity --profile griddog   # verify — should print account 369042512949
+```
+
+If you're on a fresh machine and need to set up the profile first:
+
 ```bash
 aws configure sso
-# SSO session name: griddog
-# SSO start URL: https://<your-company>.awsapps.com/start
-# SSO region: ap-southeast-1
-# CLI profile name: griddog
-
-aws sso login --profile griddog
-aws sts get-caller-identity --profile griddog   # verify — should return your account ID
+# SSO session name:  griddog
+# SSO start URL:     https://d-906757b57c.awsapps.com/start/#
+# SSO region:        us-east-1
+# Account ID:        369042512949
+# Role:              account-admin
+# Default region:    ap-southeast-1
+# Output format:     json
+# CLI profile name:  griddog
 ```
 
 ### 3. Create an EC2 key pair (one-time)
@@ -73,7 +84,8 @@ Edit `terraform.tfvars`:
 
 | Variable | Description | Example |
 |---|---|---|
-| `admin_cidr` | Your IP for SSH — run `curl ifconfig.me` then append `/32` | `42.61.131.119/32` |
+| `admin_cidr` | List of IPs for SSH — run `curl ifconfig.me` then append `/32` | `["1.2.3.4/32", "5.6.7.8/32"]` |
+| `alb_allowed_cidrs` | List of IPs that can reach the ALB on port 80 | `["1.2.3.4/32"]` |
 | `key_name` | EC2 key pair created above | `griddog-keypair` |
 | `db_password` | Password for Postgres + MongoDB | `MyStr0ngPass!` |
 | `datadog_api_key` | Datadog API key (leave `placeholder` if not ready) | `abc123...` |
@@ -106,10 +118,16 @@ terraform output
 
 Key outputs:
 ```
-app_url          = "http://griddog-alb-xxxx.ap-southeast-1.elb.amazonaws.com"
-nginx_public_ip  = "54.x.x.x"
-private_ips      = { nginx = "...", frontend = "...", app = "...", databases = "..." }
-ssh_commands     = { nginx = "ssh -i ~/.ssh/griddog-keypair.pem ubuntu@54.x.x.x", ... }
+alb_dns_name    = "griddog-alb-74035986.ap-southeast-1.elb.amazonaws.com"
+app_url         = "http://griddog-alb-74035986.ap-southeast-1.elb.amazonaws.com"
+nginx_public_ip = "54.254.196.99"
+private_ips     = { nginx = "172.31.64.218", frontend = "172.31.66.28", app = "172.31.66.214", databases = "172.31.66.145" }
+ssh_commands    = {
+  nginx     = "ssh -i ~/.ssh/griddog-keypair.pem ubuntu@54.254.196.99"
+  frontend  = "ssh -i ~/.ssh/griddog-keypair.pem -J ubuntu@54.254.196.99 ubuntu@172.31.66.28"
+  app       = "ssh -i ~/.ssh/griddog-keypair.pem -J ubuntu@54.254.196.99 ubuntu@172.31.66.214"
+  databases = "ssh -i ~/.ssh/griddog-keypair.pem -J ubuntu@54.254.196.99 ubuntu@172.31.66.145"
+}
 ```
 
 ---
@@ -166,16 +184,61 @@ terraform apply   # apply the changes
 
 ---
 
-## Update your IP (if your IP changes)
+## Add / update IPs (when your IP changes or at a client site)
 
-Edit `terraform.tfvars`:
+### Option A — Terraform (permanent)
+
+Edit `terraform.tfvars` and add the new IP to both lists:
 ```hcl
-admin_cidr = "<new-ip>/32"   # run: curl ifconfig.me
+admin_cidr = [
+  "42.61.131.119/32",  # home
+  "CLIENT_IP/32",       # client site — get it with: curl ifconfig.me
+]
+
+alb_allowed_cidrs = [
+  "42.61.131.119/32",
+  "CLIENT_IP/32",
+]
 ```
 
-Then:
 ```bash
-terraform apply   # only updates the security group rules
+export AWS_PROFILE=griddog
+terraform apply   # only updates the security group rules, no EC2 restarts
+```
+
+### Option B — AWS CLI (fast, temporary — best for on-site demos)
+
+```bash
+# Add your current IP instantly (no terraform needed)
+MY_IP=$(curl -s ifconfig.me)
+REGION="ap-southeast-1"
+
+SG_NGINX=$(aws ec2 describe-security-groups --region $REGION --profile griddog --filters "Name=group-name,Values=griddog-ec2-nginx" --query 'SecurityGroups[0].GroupId' --output text)
+SG_FRONTEND=$(aws ec2 describe-security-groups --region $REGION --profile griddog --filters "Name=group-name,Values=griddog-ec2-frontend" --query 'SecurityGroups[0].GroupId' --output text)
+SG_APP=$(aws ec2 describe-security-groups --region $REGION --profile griddog --filters "Name=group-name,Values=griddog-ec2-app" --query 'SecurityGroups[0].GroupId' --output text)
+SG_DB=$(aws ec2 describe-security-groups --region $REGION --profile griddog --filters "Name=group-name,Values=griddog-ec2-databases" --query 'SecurityGroups[0].GroupId' --output text)
+SG_ALB=$(aws ec2 describe-security-groups --region $REGION --profile griddog --filters "Name=group-name,Values=griddog-ec2-alb" --query 'SecurityGroups[0].GroupId' --output text)
+
+for SG in $SG_NGINX $SG_FRONTEND $SG_APP $SG_DB; do
+  aws ec2 authorize-security-group-ingress --region $REGION --profile griddog \
+    --group-id $SG --protocol tcp --port 22 --cidr "$MY_IP/32"
+done
+aws ec2 authorize-security-group-ingress --region $REGION --profile griddog \
+  --group-id $SG_ALB --protocol tcp --port 80 --cidr "$MY_IP/32"
+
+echo "Access granted for $MY_IP"
+```
+
+```bash
+# Remove when done (cleanup)
+for SG in $SG_NGINX $SG_FRONTEND $SG_APP $SG_DB; do
+  aws ec2 revoke-security-group-ingress --region $REGION --profile griddog \
+    --group-id $SG --protocol tcp --port 22 --cidr "$MY_IP/32"
+done
+aws ec2 revoke-security-group-ingress --region $REGION --profile griddog \
+  --group-id $SG_ALB --protocol tcp --port 80 --cidr "$MY_IP/32"
+
+echo "Access revoked for $MY_IP"
 ```
 
 ---

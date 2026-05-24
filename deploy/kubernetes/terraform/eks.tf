@@ -42,6 +42,20 @@ module "eks" {
   enable_cluster_creator_admin_permissions = true
   authentication_mode                      = "API_AND_CONFIG_MAP"
 
+  # Extra ingress rules on the module-created node SG.
+  # Datadog cluster-agent's mutating webhook listens on pod port 8000
+  # (Service 443 → targetPort 8000); the API server must reach it.
+  node_security_group_additional_rules = {
+    ingress_cluster_8000_datadog_webhook = {
+      description                   = "Cluster API to Datadog admission controller webhook"
+      protocol                      = "tcp"
+      from_port                     = 8000
+      to_port                       = 8000
+      type                          = "ingress"
+      source_cluster_security_group = true
+    }
+  }
+
   # Common defaults applied to all 3 node groups
   eks_managed_node_group_defaults = {
     ami_type       = "AL2023_x86_64_STANDARD"

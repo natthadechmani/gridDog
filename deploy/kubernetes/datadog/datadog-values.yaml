@@ -6,14 +6,12 @@ datadog:
     enabled: true
   orchestratorExplorer:
     enabled: true
+  tags:
+    - "env:k8s"
   apm:
-    instrumentation:
-      enabled: true
-      targets:
-        - name: "default-target"
-          ddTraceConfigs:
-            - name: "DD_PROFILING_ENABLED"
-              value: "auto"
+    socketEnabled: true
+    hostSocketPath: /var/run/datadog/
+    socketPath: /var/run/datadog/apm.socket
   logs:
     enabled: true
     containerCollectAll: true
@@ -25,3 +23,9 @@ datadog:
 agents:
   tolerations:
     - operator: Exists
+
+clusterAgent:
+  admissionController:
+    enabled: true
+    mutateUnlabelled: true  # ← flip this to false to disable automatic labeling
+    failurePolicy: Fail  

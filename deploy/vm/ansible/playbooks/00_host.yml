@@ -1,0 +1,64 @@
+---
+- name: Configure host (Docker log rotation, journald limits)
+  hosts: all
+  become: true
+
+  tasks:
+    # --- Docker daemon: cap container log size ---
+
+    - name: Ensure /etc/docker exists
+      ansible.builtin.file:
+        path: /etc/docker
+        state: directory
+        mode: "0755"
+
+    - name: Configure Docker log rotation (json-file driver)
+      ansible.builtin.copy:
+        dest: /etc/docker/daemon.json
+        mode: "0644"
+        content: |
+          {
+            "log-driver": "json-file",
+            "log-opts": {
+              "max-size": "50m",
+              "max-file": "3"
+            }
+          }
+      notify: Restart Docker
+
+    # --- systemd-journald: cap journal disk usage ---
+
+    - name: Ensure /etc/systemd/journald.conf.d exists
+      ansible.builtin.file:
+        path: /etc/systemd/journald.conf.d
+        state: directory
+        mode: "0755"
+
+    - name: Configure journald disk limits
+      ansible.builtin.copy:
+        dest: /etc/systemd/journald.conf.d/00-griddog-limits.conf
+        mode: "0644"
+        content: |
+          [Journal]
+          SystemMaxUse=200M
+          SystemKeepFree=500M
+          MaxFileSec=1week
+      register: journald_config
+      notify: Restart journald
+
+    - name: Vacuum existing journal logs to enforce new limit
+      ansible.builtin.command:
+        cmd: journalctl --vacuum-size=200M
+      when: journald_config.changed
+      changed_when: true
+
+  handlers:
+    - name: Restart Docker
+      ansible.builtin.systemd:
+        name: docker
+        state: restarted
+
+    - name: Restart journald
+      ansible.builtin.systemd:
+        name: systemd-journald
+        state: restarted

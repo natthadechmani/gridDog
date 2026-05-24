@@ -430,9 +430,7 @@ Run `ansible-playbook playbooks/02_app.yml` and `playbooks/03_frontend.yml` to r
 
 ### Docker build fails — out of disk
 
-```bash
-ansible all -m shell -a "docker system prune -f"
-```
+See [Disk space runbook](#disk-space-runbook) below for the full investigation and cleanup flow.
 
 ### GitHub clone fails — 401 Unauthorized
 
@@ -474,3 +472,132 @@ docker image prune -f
 ```
 
 Then re-run `ansible-playbook playbooks/02_app.yml`.
+
+---
+
+## Operational Runbooks
+
+### Disk space runbook
+
+Use this when an EC2 is filling up (`df` shows 80%+ on `/`), or for routine fleet-wide hygiene.
+
+#### Linked observability
+
+| Asset | Where | Trigger |
+|---|---|---|
+| **Alert** — `[GridDog] Host root disk usage high` | [`deploy/datadog/monitors/host-disk-usage.json`](../../datadog/monitors/host-disk-usage.json) | Warns at 80%, alerts at 90% on `/dev/root` per host. Pages this runbook. |
+| **Dashboard** — `GridDog — Host Disk` | [`deploy/datadog/dashboards/host-disk.json`](../../datadog/dashboards/host-disk.json) | First place to look when alert fires. Shows per-host trend, ranked list, fill rate, and Docker overlay storage. |
+
+How to apply both: see [`deploy/datadog/README.md`](../../datadog/README.md) — three options (UI import, curl, Terraform).
+
+When the alert fires, the recommended flow is:
+
+1. Open the dashboard, find which host(s) crossed threshold, eyeball the **rate-of-change** widget to see if it's a slow leak or a sudden fill.
+2. If sudden fill: jump straight to step 3 below (host investigation) on the affected host.
+3. If slow leak: schedule the cleanup but don't page — preventive run of step 4 (fleet-wide cleanup) is usually enough.
+
+#### 1. Check disk usage on every host
+
+From your laptop:
+
+```bash
+cd deploy/vm/ansible
+
+# One-line summary of root filesystem on every host
+ansible all -i inventory.ini -m ansible.builtin.shell -a "df -h /" --one-line
+
+# Full df -h (all mountpoints, multi-line per host)
+ansible all -i inventory.ini -m ansible.builtin.shell -a "df -h"
+```
+
+Expected: all hosts well under 80% on `/`. If any host is over 80%, drop into the investigation steps below.
+
+#### 2. Investigate a specific host
+
+SSH in (use nginx as the bastion for private hosts), then drill down:
+
+```bash
+# Top-level breakdown of the root filesystem
+sudo du -h -d 1 -x / 2>/dev/null | sort -hr | head -20
+
+# Most common suspects on this stack
+sudo du -sh /var/log /var/lib/docker /var/lib/containerd /var/cache 2>/dev/null
+
+# journald usage
+sudo journalctl --disk-usage
+```
+
+Then narrow further into whichever subdir is biggest. **Note:** `/var/lib/docker` is mode 0700, so the shell glob `/var/lib/docker/*` won't expand under sudo unless you wrap it in a root shell:
+
+```bash
+# Wrong: glob expands as your user, returns "No such file"
+sudo du -sh /var/lib/docker/*
+
+# Right: glob expands inside the root shell
+sudo bash -c 'du -sh /var/lib/docker/*' | sort -hr
+sudo bash -c 'du -sh /var/lib/containerd/*' | sort -hr   # containerd-snapshotter mode
+```
+
+#### 3. Common culprits and fixes
+
+| Culprit | Symptom | Fix |
+|---|---|---|
+| Unrotated container logs | One huge file in `/var/lib/docker/containers/<id>/<id>-json.log` | `sudo truncate -s 0 /var/lib/docker/containers/*/*-json.log` (safe on running containers — do **not** `rm`) |
+| Build cache pile | `/var/lib/containerd` >>> `/var/lib/docker`; `docker system df` shows GBs reclaimable | `sudo docker builder prune -a -f` |
+| Stale images | `docker images` shows untagged `<none>` entries | `sudo docker image prune -a -f` |
+| journald sprawl | `/var/log/journal` > 200 MB | `sudo journalctl --vacuum-size=200M` |
+
+After truncating container logs or pruning, run `df -h /` to confirm the reclaim.
+
+#### 4. Fleet-wide cleanup (preventive)
+
+Run these from your laptop to clean up multiple hosts in one shot:
+
+```bash
+cd deploy/vm/ansible
+
+# Prune build cache + show what's left (skip the host you're worried about breaking)
+ansible frontend,databases,nginx -i inventory.ini -b -m ansible.builtin.shell \
+  -a "docker builder prune -a -f && docker system df"
+
+# Truncate all container JSON logs across the fleet
+ansible all -i inventory.ini -b -m ansible.builtin.shell \
+  -a "truncate -s 0 /var/lib/docker/containers/*/*-json.log"
+
+# Vacuum journald to 200 MB everywhere
+ansible all -i inventory.ini -b -m ansible.builtin.shell \
+  -a "journalctl --vacuum-size=200M"
+```
+
+#### 5. Permanent prevention
+
+Already configured in [playbooks/00_host.yml](playbooks/00_host.yml):
+
+- **Docker container logs** capped at 50 MB × 3 files per container via `/etc/docker/daemon.json`
+- **journald** capped at 200 MB total via `/etc/systemd/journald.conf.d/00-griddog-limits.conf`
+
+Re-apply if these settings have drifted on a host:
+
+```bash
+ansible-playbook -i inventory.ini playbooks/00_host.yml
+```
+
+**Important:** `daemon.json` log-opts only apply to containers created **after** the Docker daemon restart. Existing containers keep their old log opts until recreated:
+
+```bash
+ansible all -i inventory.ini -b -m community.docker.docker_compose_v2 \
+  -a "project_src=/opt/griddog-compose state=present recreate=always"
+```
+
+#### 6. When you've found the bottom
+
+The expected steady-state on a fresh post-cleanup host is roughly:
+
+| Mountpoint | Healthy range | Yellow flag | Red flag |
+|---|---|---|---|
+| `/` (root) | < 50% | 60–80% | > 80% |
+| `/var/lib/docker` | < 200 MB | — | — |
+| `/var/lib/containerd` | < 5 GB | 5–10 GB | > 10 GB (prune build cache) |
+| `/var/log/journal` | < 200 MB | — | — |
+
+If a host trends back toward red after applying `00_host.yml`, the rotation isn't taking effect — most likely the container wasn't recreated after the daemon.json change (see step 5).

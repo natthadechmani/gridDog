@@ -17,8 +17,8 @@ variable "availability_zone" {
 }
 
 variable "admin_cidr" {
-  description = "CIDR block allowed for SSH access (e.g. 1.2.3.4/32)"
-  type        = string
+  description = "List of CIDRs allowed for SSH access (e.g. your home IP, office IP)"
+  type        = list(string)
 }
 
 variable "alb_allowed_cidrs" {

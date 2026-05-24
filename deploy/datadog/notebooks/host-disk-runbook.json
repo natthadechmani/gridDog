@@ -1,0 +1,155 @@
+{
+  "data": {
+    "type": "notebooks",
+    "attributes": {
+      "name": "GridDog — Host Disk Runbook",
+      "status": "published",
+      "metadata": {
+        "type": "runbook",
+        "is_template": false,
+        "take_snapshots": false
+      },
+      "time": {
+        "live_span": "4h"
+      },
+      "cells": [
+        {
+          "type": "notebook_cells",
+          "attributes": {
+            "definition": {
+              "type": "markdown",
+              "text": "# GridDog — Host Disk Runbook\n\nWhen `[GridDog] Host root disk usage high` fires, work top-to-bottom through this notebook.\n\n**Hosts:** `griddog-nginx`, `griddog-frontend`, `griddog-app`, `griddog-databases` (env `dev-vm`).\n\n**Steady-state:** `griddog-nginx` has only 6.8 G of root disk and runs near 60% — the others are 19 G and run < 50%. Tune expectations accordingly."
+            }
+          }
+        },
+        {
+          "type": "notebook_cells",
+          "attributes": {
+            "definition": {
+              "type": "markdown",
+              "text": "## 1. Triage — which host(s) and how fast?\n\nThe charts below are live; use them to narrow scope before touching any host."
+            }
+          }
+        },
+        {
+          "type": "notebook_cells",
+          "attributes": {
+            "definition": {
+              "type": "timeseries",
+              "title": "Disk % used — root filesystem by host",
+              "show_legend": true,
+              "legend_layout": "auto",
+              "legend_columns": ["avg", "min", "max", "value"],
+              "requests": [
+                {
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "avg:system.disk.in_use{env:dev-vm,device:/dev/root} by {host}"
+                    }
+                  ],
+                  "formulas": [{"formula": "query1", "alias": "{{host}}"}],
+                  "response_format": "timeseries",
+                  "style": {"palette": "dog_classic", "line_type": "solid", "line_width": "normal"},
+                  "display_type": "line"
+                }
+              ],
+              "yaxis": {"include_zero": true, "scale": "linear", "min": "0", "max": "1"},
+              "markers": [
+                {"value": "y = 0.9", "display_type": "error dashed", "label": " 90% "},
+                {"value": "y = 0.8", "display_type": "warning dashed", "label": " 80% "}
+              ]
+            },
+            "graph_size": "m",
+            "split_by": {"keys": [], "tags": []}
+          }
+        },
+        {
+          "type": "notebook_cells",
+          "attributes": {
+            "definition": {
+              "type": "timeseries",
+              "title": "Disk used — rate of change (catches fast fills)",
+              "show_legend": true,
+              "legend_layout": "auto",
+              "legend_columns": ["avg", "min", "max", "value"],
+              "requests": [
+                {
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "avg:system.disk.used{env:dev-vm,device:/dev/root} by {host}"
+                    }
+                  ],
+                  "formulas": [{"formula": "per_minute(query1)", "alias": "{{host}} bytes/min"}],
+                  "response_format": "timeseries",
+                  "style": {"palette": "warm", "line_type": "solid", "line_width": "normal"},
+                  "display_type": "bars"
+                }
+              ],
+              "yaxis": {"include_zero": true, "scale": "linear"}
+            },
+            "graph_size": "m",
+            "split_by": {"keys": [], "tags": []}
+          }
+        },
+        {
+          "type": "notebook_cells",
+          "attributes": {
+            "definition": {
+              "type": "markdown",
+              "text": "## 2. Fleet-wide visibility from your laptop\n\n```bash\ncd deploy/vm/ansible\n\n# One-line per host\nansible all -i inventory.ini -m ansible.builtin.shell -a \"df -h /\" --one-line\n```\n\nRun this first. It tells you whether the alert is one host or several."
+            }
+          }
+        },
+        {
+          "type": "notebook_cells",
+          "attributes": {
+            "definition": {
+              "type": "markdown",
+              "text": "## 3. Investigate the affected host\n\nSSH to the host (use `griddog-nginx` as bastion for private hosts), then drill down:\n\n```bash\n# Top-level breakdown of the root filesystem\nsudo du -h -d 1 -x / 2>/dev/null | sort -hr | head -20\n\n# Most common suspects\nsudo du -sh /var/log /var/lib/docker /var/lib/containerd /var/cache 2>/dev/null\nsudo journalctl --disk-usage\n```\n\n**Sudo glob gotcha:** `/var/lib/docker` is mode `0700`. `sudo du -sh /var/lib/docker/*` returns no results because the glob expands as your user before sudo runs. Use:\n\n```bash\nsudo bash -c 'du -sh /var/lib/docker/*' | sort -hr\nsudo bash -c 'du -sh /var/lib/containerd/*' | sort -hr   # containerd-snapshotter mode\n```"
+            }
+          }
+        },
+        {
+          "type": "notebook_cells",
+          "attributes": {
+            "definition": {
+              "type": "markdown",
+              "text": "## 4. Common culprits → fix\n\n| Culprit | Symptom | Fix |\n|---|---|---|\n| Unrotated container logs | One huge file in `/var/lib/docker/containers/<id>/<id>-json.log` | `sudo truncate -s 0 /var/lib/docker/containers/*/*-json.log` (safe on running containers — do **not** `rm`) |\n| Build cache pile | `/var/lib/containerd` >>> `/var/lib/docker`; `docker system df` shows GBs reclaimable | `sudo docker builder prune -a -f` |\n| Stale images | `docker images` shows untagged `<none>` entries | `sudo docker image prune -a -f` |\n| journald sprawl | `/var/log/journal` > 200 MB | `sudo journalctl --vacuum-size=200M` |\n\nAfter truncating or pruning, re-check `df -h /`."
+            }
+          }
+        },
+        {
+          "type": "notebook_cells",
+          "attributes": {
+            "definition": {
+              "type": "markdown",
+              "text": "## 5. Fleet-wide cleanup (preventive)\n\nRun from your laptop to clean multiple hosts in one shot:\n\n```bash\ncd deploy/vm/ansible\n\n# Prune build cache + show what's left\nansible frontend,databases,nginx -i inventory.ini -b -m ansible.builtin.shell \\\n  -a \"docker builder prune -a -f && docker system df\"\n\n# Truncate all container JSON logs\nansible all -i inventory.ini -b -m ansible.builtin.shell \\\n  -a \"truncate -s 0 /var/lib/docker/containers/*/*-json.log\"\n\n# Vacuum journald to 200 MB everywhere\nansible all -i inventory.ini -b -m ansible.builtin.shell \\\n  -a \"journalctl --vacuum-size=200M\"\n```"
+            }
+          }
+        },
+        {
+          "type": "notebook_cells",
+          "attributes": {
+            "definition": {
+              "type": "markdown",
+              "text": "## 6. Permanent prevention\n\nAlready configured in `deploy/vm/ansible/playbooks/00_host.yml`:\n\n- **Container logs** capped at 50 MB × 3 files per container via `/etc/docker/daemon.json`\n- **journald** capped at 200 MB total via a drop-in under `/etc/systemd/journald.conf.d/`\n\nRe-apply if these settings have drifted on a host:\n\n```bash\nansible-playbook -i inventory.ini playbooks/00_host.yml\n```\n\n**Important:** `daemon.json` log-opts only apply to containers created **after** the Docker daemon restart. Existing containers keep their old log opts until recreated:\n\n```bash\nansible all -i inventory.ini -b -m community.docker.docker_compose_v2 \\\n  -a \"project_src=/opt/griddog-compose state=present recreate=always\"\n```"
+            }
+          }
+        },
+        {
+          "type": "notebook_cells",
+          "attributes": {
+            "definition": {
+              "type": "markdown",
+              "text": "## Steady-state thresholds\n\n| Mountpoint | Healthy | Yellow | Red |\n|---|---|---|---|\n| `/` (root) | < 50% | 60–80% | > 80% (alert fires) |\n| `/var/lib/docker` | < 200 MB | — | — |\n| `/var/lib/containerd` | < 5 GB | 5–10 GB | > 10 GB (prune build cache) |\n| `/var/log/journal` | < 200 MB | — | — |\n\nIf a host trends back toward red after applying `00_host.yml`, the rotation isn't taking effect — most likely the container wasn't recreated after the daemon.json change (see step 6)."
+            }
+          }
+        }
+      ]
+    }
+  }
+}

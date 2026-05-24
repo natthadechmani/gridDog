@@ -65,7 +65,7 @@ Default VPC (172.31.0.0/16)  — existing, referenced
 
 ```
 Browser
-  → ALB DNS  (griddog-alb-xxxx.ap-southeast-1.elb.amazonaws.com)
+  → ALB DNS  (griddog-alb-74035986.ap-southeast-1.elb.amazonaws.com)
     → ALB :80  (HTTP, restricted to alb_allowed_cidrs)
       → griddog-nginx :80
         ├── /api/* → griddog-app  <app_private_ip>:8080  (Go backend)
