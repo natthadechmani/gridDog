@@ -34,7 +34,8 @@
       "Bash(claude mcp *)",
       "Bash(cat ~/.aws/config 2>/dev/null || echo \"no aws config found\")",
       "Read(//Users/natthadech.manichot/.aws/**)",
-      "Bash(go version *)"
+      "Bash(go version *)",
+      "Bash(git rm *)"
     ],
     "additionalDirectories": [
       "/Users/natthadech.manichot/Desktop/project/sandbox/gridDog/deploy/kubernetes"

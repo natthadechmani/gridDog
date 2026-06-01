@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import DatadogInit from './components/datadog-init'
 
 export const metadata: Metadata = {
   title: 'GridDog — Observability Sandbox',
@@ -21,6 +22,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
       <body className="bg-background text-text-primary antialiased min-h-screen">
+        <DatadogInit />
         {children}
       </body>
     </html>

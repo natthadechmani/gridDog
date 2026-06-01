@@ -20,3 +20,7 @@ deploy/kubernetes/terraform/terraform.tfstate.backup
 
 # EKS Kubernetes Secret values
 deploy/kubernetes/secrets.env
+
+# Frontend dependencies
+frontend/node_modules/
+frontend/package-lock.json
